@@ -253,8 +253,21 @@ function readState(root) {
 
 function writeState(root, state) {
   const dir = path.join(root, STATE_DIR);
-  fs.mkdirSync(dir, { recursive: true });
+  ensureStateDir(root);
   fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify(state, null, 2));
+}
+
+// The state dir ignores itself, so repos without a .gitignore entry stay clean.
+function ensureStateDir(root) {
+  const dir = path.join(root, STATE_DIR);
+  fs.mkdirSync(dir, { recursive: true });
+  const ignore = path.join(dir, '.gitignore');
+  if (!fs.existsSync(ignore)) fs.writeFileSync(ignore, '*\n');
+  return dir;
+}
+
+function appendHistory(state, event, max = 20) {
+  return [...(state.history || []), { at: new Date().toISOString(), ...event }].slice(-max);
 }
 
 function resolveAnalyzers(names, compiler) {
@@ -266,6 +279,9 @@ function resolveAnalyzers(names, compiler) {
     return dll && fs.existsSync(dll) ? dll : null;
   }).filter(Boolean);
 }
+
+// Default dotnet tool version when the repo pins none (cloud/Linux).
+const DEFAULT_AL_TOOL = '18.1.43.24897';
 
 const DEFAULT_ANALYZERS = ['CodeCop', 'UICop', 'PerTenantExtensionCop'];
 
@@ -309,6 +325,7 @@ function verifyAll(root, opts = {}) {
     projects = projects.filter((p) => keep.has(p));
   }
 
+  ensureStateDir(root);
   const inRepoPrefixes = new Set(projects.map((p) => `${p.manifest.publisher}_${p.manifest.name}`.toLowerCase()));
   const built = new Map();
   const results = [];
@@ -335,4 +352,4 @@ function verifyAll(root, opts = {}) {
   return { status, results, compiler, bcMajor, cfg, projects };
 }
 
-module.exports = { STATE_DIR, loadConfig, findProjects, findCompiler, targetBcMajor, fingerprint, readState, writeState, verifyAll };
+module.exports = { STATE_DIR, DEFAULT_AL_TOOL, loadConfig, findProjects, findCompiler, targetBcMajor, fingerprint, readState, writeState, ensureStateDir, appendHistory, verifyAll };

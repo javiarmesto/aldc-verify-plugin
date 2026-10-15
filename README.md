@@ -17,6 +17,10 @@ claude plugin marketplace add javiarmesto/aldc-verify-plugin && claude plugin in
 
 Tarda unos 2 s. Después, el SessionStart instala dotnet8 y `al` (unos 22 s la primera vez y 50 ms en caliente).
 
+- El setup script solo se ejecuta en sesiones **nuevas**. Una sesión reanudada desde caché (`has_init_script:false`) no lo ejecuta.
+- El `.claude/settings.json` del repo no basta en headless ni en cloud: hace falta el setup script.
+- Para probar una copia local del plugin sin instalarla: `claude --plugin-dir <ruta-al-plugin>` (vale también con `-p`).
+
 También se puede activar por repo en `.claude/settings.json`. Con esto en modo interactivo se ofrece instalarlo tras aceptar la confianza del proyecto (sin verificar); en headless y en cloud, no:
 
 ```json
@@ -28,7 +32,7 @@ También se puede activar por repo en `.claude/settings.json`. Con esto en modo 
 
 ## Estado
 
-v0.1.1. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+L2) y el **SessionStart** del toolchain. Faltan `al-build-validator`, `/al-go`, `/al-learn` y las plantillas.
+v0.1.2. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+L2) y el **SessionStart** del toolchain. Faltan `al-build-validator`, `/al-go`, `/al-learn` y las plantillas.
 
 ## Stop gate
 
@@ -44,7 +48,7 @@ v0.1.1. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+
 6. Si tras `maxAttempts` (3) bloqueos seguidos sigue rojo, deja parar y avisa al usuario con los errores pendientes. Una vez dado ese resumen, mientras el árbol no cambie no vuelve a compilar (`releasedFp`). El contador se reinicia en cada parada nueva (`stop_hook_active=false`).
 7. Si no hay compilador, faltan símbolos o alc falla sin dar diagnósticos, muestra `not-run` o `verificación incompleta` y **no bloquea**.
 
-`state.json` guarda un `history` con los últimos 20 eventos (`blocked`, `released`, `green`, `not-run`…, con `attempt` y `errorCodes`), para auditar cuántas veces bloqueó. El estado y la caché van en `.claude/.aldc-verify/`, que hay que añadir al `.gitignore` del repo.
+`state.json` guarda un `history` con los últimos 20 eventos (`blocked`, `released`, `green`, `not-run`…, con `attempt` y `errorCodes`), para auditar cuántas veces bloqueó. El estado y la caché van en `.claude/.aldc-verify/`. Esa carpeta crea su propio `.gitignore` con `*`, así que no ensucia ningún repo aunque este no la ignore. Aun así, conviene añadirla al `.gitignore` del repo.
 
 ### Configuración por repo: `.claude/aldc-verify.json` (opcional)
 

@@ -65,7 +65,7 @@ function main() {
   const now = new Date().toISOString();
   const save = (patch, event) => env.writeState(root, {
     ...state, ...patch, lastRun: now,
-    history: [...(state.history || []), { at: now, ...event }].slice(-HISTORY),
+    history: env.appendHistory(state, event, HISTORY),
   });
 
   if (result.status === 'not-run') {

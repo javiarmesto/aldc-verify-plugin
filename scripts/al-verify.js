@@ -53,8 +53,7 @@ function main() {
       warnings: (r.warnings || []).map((d) => ({ ...d, file: d.file && rel(root, d.file) })),
     })),
   };
-  const dir = path.join(root, env.STATE_DIR);
-  fs.mkdirSync(dir, { recursive: true });
+  const dir = env.ensureStateDir(root);
   fs.writeFileSync(path.join(dir, 'last-report.json'), JSON.stringify(report, null, 2));
 
   // A full green compile also satisfies the Stop gate, so it won't recompile the same tree.
@@ -62,7 +61,7 @@ function main() {
     const cfg = env.loadConfig(root);
     const projects = env.findProjects(root);
     const state = env.readState(root);
-    env.writeState(root, { ...state, attempts: 0, lastGreen: env.fingerprint(root, projects, { bcMajor: env.targetBcMajor(cfg, projects), compiler: cfg.compiler }), lastRun: new Date().toISOString() });
+    env.writeState(root, { ...state, attempts: 0, releasedFp: null, history: env.appendHistory(state, { status: 'green', via: 'al-verify', afterBlocks: state.attempts || 0 }), lastGreen: env.fingerprint(root, projects, { bcMajor: env.targetBcMajor(cfg, projects), compiler: cfg.compiler }), lastRun: new Date().toISOString() });
   }
 
   if (args.json) { console.log(JSON.stringify(report, null, 2)); return report.projects.some((p) => p.errors.length) ? 1 : 0; }
@@ -96,7 +95,8 @@ function main() {
     if (allErrors.length > MAX_ERRORS) out.push(`  … y ${allErrors.length - MAX_ERRORS} más`);
   }
   if (allWarnings.length) {
-    out.push('', `Warnings (primeros ${Math.min(MAX_WARNINGS, allWarnings.length)} de ${allWarnings.length}):`);
+    const perProject = report.projects.filter((p) => p.warnings && p.warnings.length).map((p) => `${p.project} ${p.warnings.length}`).join(' · ');
+    out.push('', `Warnings (primeros ${Math.min(MAX_WARNINGS, allWarnings.length)} de ${allWarnings.length}: ${perProject}):`);
     for (const w of allWarnings.slice(0, MAX_WARNINGS)) out.push(`  ${w.file}(${w.line},${w.col}): ${w.code}: ${w.message.length > 120 ? w.message.slice(0, 117) + '…' : w.message}`);
   }
   if (l2Incomplete) out.push('', 'Estado: partial. L1 vale, pero L2 no se ha ejecutado completo: no digas que los analizadores pasan.');

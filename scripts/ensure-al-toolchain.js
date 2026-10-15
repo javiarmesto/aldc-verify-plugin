@@ -12,7 +12,6 @@ const { spawnSync } = require('child_process');
 const env = require('./lib/al-env');
 
 const AL_TOOL_PACKAGE = 'Microsoft.Dynamics.BusinessCentral.Development.Tools';
-const DEFAULT_AL_TOOL = '18.1.43.24897';
 
 function out(context, userMessage) {
   const o = { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: context } };
@@ -71,17 +70,18 @@ function main() {
   const tail = `BC ${bcMajor}, proyectos: ${names}. Compila con /aldc-verify:al-verify; el Stop hook compila lo que cambies.`;
 
   if (process.platform === 'linux') {
-    const version = cfg.compiler.alTool || DEFAULT_AL_TOOL;
+    const version = cfg.compiler.alTool || env.DEFAULT_AL_TOOL;
+    const from = cfg.compiler.alTool ? 'fijada en .claude/aldc-verify.json' : 'por defecto del plugin; fíjala en .claude/aldc-verify.json';
     const fresh = env.findCompiler(cfg);
     const warm = !fresh.error && fresh.source === 'dotnet-tool' && installedToolVersions().includes(version);
     const vscodeOk = !fresh.error && fresh.source !== 'dotnet-tool' && !cfg.compiler.alTool;
-    if (warm || vscodeOk) { persistPath(); out(`aldc-verify: compilador AL listo (${fresh.source} ${warm ? version : fresh.version}). ${tail}`); return; }
+    if (warm || vscodeOk) { persistPath(); out(`aldc-verify: compilador AL listo (${fresh.source} ${warm ? version : fresh.version}${warm ? `, ${from}` : ''}). ${tail}`); return; }
     const started = Date.now();
     const r = installLinux(version);
     const secs = ((Date.now() - started) / 1000).toFixed(0);
     if (!r.ok) { out(`aldc-verify: not-run, no hay compilador AL: ${r.error}. No digas que el código compila.`, `aldc-verify: no he podido instalar el compilador AL (${r.error}).`); return; }
     persistPath();
-    out(`aldc-verify: compilador AL instalado (dotnet tool al ${version}, ${secs} s). ${tail}`, `aldc-verify: instalado dotnet tool al ${version} en ${secs} s (${r.steps.join(', ')}).`);
+    out(`aldc-verify: compilador AL instalado (dotnet tool al ${version}, ${from}, ${secs} s). ${tail}`, `aldc-verify: instalado dotnet tool al ${version} en ${secs} s (${r.steps.join(', ')}).`);
     return;
   }
 
