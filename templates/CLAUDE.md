@@ -11,6 +11,7 @@ Extensión AL de Business Central. Cliente en **BC {{BC_MAJOR}}**. Proyectos: {{
 - **Asientos:** el código nunca registra asientos contables automáticamente. Mapeos y reglas son datos (tablas de configuración), no código.
 - **Versión:** sube la `version` de `app.json` de la app en cada entrega. La app de test no va a producción.
 - **Símbolos:** se compila contra los símbolos de BC {{BC_MAJOR}} que están en `.alpackages`. No los sustituyas por otra versión mayor.
+- **Idioma:** habla con el usuario en castellano; código, nombres técnicos y commits en inglés (o el estilo que ya tenga el repo).
 - **Honestidad:** si no has compilado o ejecutado algo, dilo ("not-run"). Nunca des un resultado por supuesto.
 
 ## Compilar y verificar

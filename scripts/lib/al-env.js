@@ -69,10 +69,19 @@ function majorOf(version) {
   return m ? Number(m[1]) : null;
 }
 
+// Reference BC major: the repo pin, else the main app's (the first project in dependency order,
+// e.g. App before Test). Test apps often declare an older `application` than the app they test.
 function targetBcMajor(cfg, projects) {
   if (cfg.bcMajor) return Number(cfg.bcMajor);
-  const majors = projects.map((p) => majorOf(p.manifest.application)).filter((m) => m);
-  return majors.length ? Math.min(...majors) : null;
+  const main = projects.find((p) => majorOf(p.manifest.application));
+  return main ? majorOf(main.manifest.application) : null;
+}
+
+// Symbol filter per project: the repo pin applies to every project; without a pin each
+// project uses its own `application` major.
+function projectBcMajor(cfg, project, fallback) {
+  if (cfg.bcMajor) return Number(cfg.bcMajor);
+  return majorOf(project.manifest.application) || fallback;
 }
 
 function compareVersions(a, b) {
@@ -157,10 +166,33 @@ function findCompiler(cfg) {
 
 // Microsoft symbols: keep the BC-major build when one exists, otherwise what is there.
 // Stale symbols of apps built from this repo are dropped; the fresh build replaces them.
-function prepareCache(project, bcMajor, cacheDir, freshApps, inRepoPrefixes) {
+// Where a project's symbols live: its own .alpackages; else the VS Code al.packageCachePath;
+// else the same folder in the main checkout (git worktrees don't get ignored .alpackages).
+function symbolSource(root, project) {
+  const hasApps = (dir) => { try { return fs.readdirSync(dir).some((f) => f.toLowerCase().endsWith('.app')); } catch { return false; } };
+  const own = path.join(project.dir, '.alpackages');
+  if (hasApps(own)) return { dir: own, from: '.alpackages' };
+  const vs = readVsCodeSettings(project.dir)['al.packageCachePath'];
+  for (const c of [].concat(vs || [])) {
+    const dir = path.resolve(project.dir, String(c));
+    if (hasApps(dir)) return { dir, from: 'al.packageCachePath' };
+  }
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root, encoding: 'utf8' });
+  if (common.status === 0) {
+    const mainRoot = path.dirname(common.stdout.trim());
+    if (path.resolve(mainRoot) !== path.resolve(root)) {
+      const dir = path.join(mainRoot, path.relative(root, project.dir), '.alpackages');
+      if (hasApps(dir)) return { dir, from: 'checkout principal' };
+    }
+  }
+  return { dir: own, from: null };
+}
+
+function prepareCache(project, bcMajor, cacheDir, freshApps, inRepoPrefixes, root) {
   fs.rmSync(cacheDir, { recursive: true, force: true });
   fs.mkdirSync(cacheDir, { recursive: true });
-  const src = path.join(project.dir, '.alpackages');
+  const source = symbolSource(root || project.dir, project);
+  const src = source.dir;
   let files = [];
   try { files = fs.readdirSync(src).filter((f) => f.toLowerCase().endsWith('.app')); } catch { /* no symbols */ }
 
@@ -180,7 +212,7 @@ function prepareCache(project, bcMajor, cacheDir, freshApps, inRepoPrefixes) {
   }
   for (const x of picked) linkOrCopy(path.join(src, x.file), path.join(cacheDir, x.file));
   for (const app of freshApps) linkOrCopy(app, path.join(cacheDir, path.basename(app)));
-  return { symbolCount: picked.length, hadSymbols: files.length > 0 };
+  return { symbolCount: picked.length, hadSymbols: files.length > 0, symbolsFrom: source.from, symbolsDir: src };
 }
 
 function linkOrCopy(from, to) {
@@ -350,14 +382,14 @@ function verifyAllUnlocked(root, opts = {}) {
     const slug = p.rel.replace(/[\\/:. ]+/g, '_') || 'root';
     const cacheDir = path.join(runDir, 'cache', slug);
     const fresh = (p.inRepoDeps || []).flatMap((d) => built.get(d));
-    const cache = prepareCache(p, bcMajor, cacheDir, fresh, inRepoPrefixes);
+    const cache = prepareCache(p, projectBcMajor(cfg, p, bcMajor), cacheDir, fresh, inRepoPrefixes, root);
     if (!cache.hadSymbols) { results.push({ project: p, skipped: `no hay símbolos en ${path.join(p.rel, '.alpackages')}` }); continue; }
     const l2 = opts.analyzers ? analyzerSettings(root, p, cfg, compiler) : null;
     const r = compileProject(compiler, p, {
       cacheDir, outDir: path.join(runDir, 'out', slug), cwd: root,
       analyzers: l2 ? l2.dlls : [], ruleset: l2 ? l2.ruleset : null,
     });
-    results.push({ project: p, l2, ...r });
+    results.push({ project: p, l2, symbolsFrom: cache.symbolsFrom, ...r });
     if (!r.errors.length && r.exitCode === 0 && r.apps.length) built.set(p, r.apps);
   }
   const errors = results.reduce((n, r) => n + (r.errors ? r.errors.length : 0), 0);

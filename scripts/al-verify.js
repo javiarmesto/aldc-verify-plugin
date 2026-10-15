@@ -46,7 +46,7 @@ function main() {
     level, root, bcMajor: result.bcMajor, status: result.status,
     compiler: { version: c.version, source: c.source, pinned: !!c.pinned, path: c.cmd },
     projects: result.results.map((r) => ({
-      project: r.project.rel, name: r.project.manifest.name, skipped: r.skipped || null,
+      project: r.project.rel, name: r.project.manifest.name, skipped: r.skipped || null, symbolsFrom: r.symbolsFrom || null,
       seconds: r.seconds, exitCode: r.exitCode,
       analyzers: r.l2 ? { names: r.l2.names, requested: r.l2.requested, missing: r.l2.missing, source: r.l2.source, ruleset: r.l2.ruleset } : null,
       errors: (r.errors || []).map((d) => ({ ...d, file: d.file && rel(root, d.file) })),
@@ -84,6 +84,7 @@ function main() {
       out.push(`    ⚠ L2 incompleto: no encuentro ${p.analyzers.missing} de ${p.analyzers.requested.length} analizadores (${p.analyzers.requested.join(', ')}) junto a alc`);
       l2Incomplete = true;
     }
+    if (p.symbolsFrom && p.symbolsFrom !== '.alpackages') out.push(`    símbolos tomados de: ${p.symbolsFrom}`);
     if (p.warnings.length) out.push(`    ${countBy(p.warnings, 'code').slice(0, 10).map(([k, n]) => `${k}×${n}`).join(', ')}`);
     if (p.exitCode !== 0 && !p.errors.length) out.push('    alc terminó con error sin diagnósticos (ver last-report.json)');
     allErrors.push(...p.errors);

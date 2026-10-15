@@ -72,8 +72,12 @@ function main() {
   // Repo name from the origin remote (a worktree folder name is not the repo name).
   const remote = git(root, ['remote', 'get-url', 'origin']);
   const repoName = (remote && remote.replace(/\.git$/, '').split(/[\/:]/).pop()) || path.basename(root);
-  const defaultBranch = (git(root, ['rev-parse', '--abbrev-ref', 'origin/HEAD']) || 'origin/main').replace(/^origin\//, '');
-  const plansRoot = ['.github/plans', '.claude/plans', 'docs/plans'].find((p) => fs.existsSync(path.join(root, p))) || '.github/plans';
+  // Ask the remote (a local origin/HEAD can be stale); fall back to the local ref, then main.
+  const lsRemote = spawnSync('git', ['ls-remote', '--symref', 'origin', 'HEAD'], { cwd: root, encoding: 'utf8', timeout: 8000 });
+  const remoteHead = lsRemote.status === 0 && /ref: refs\/heads\/(\S+)\s+HEAD/.exec(lsRemote.stdout || '');
+  const defaultBranch = remoteHead ? remoteHead[1] : (git(root, ['rev-parse', '--abbrev-ref', 'origin/HEAD']) || 'origin/main').replace(/^origin\//, '');
+  const planDirs = ['.github/plans', '.claude/plans', 'docs/plans'].filter((p) => fs.existsSync(path.join(root, p)));
+  const plansRoot = planDirs.length ? planDirs.join('` y `') : '.github/plans';
   const hasSymbols = projects.some((p) => { try { return fs.readdirSync(path.join(p.dir, '.alpackages')).some((f) => f.endsWith('.app')); } catch { return false; } });
   const vars = {
     REPO_NAME: repoName, BC_MAJOR: String(effective.bcMajor), PROJECTS: projects.map((p) => `\`${p.rel}\` (${p.manifest.name})`).join(', '),

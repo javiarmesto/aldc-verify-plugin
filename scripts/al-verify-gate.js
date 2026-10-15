@@ -54,7 +54,7 @@ function main() {
   // Main session and each code-writing subagent keep their own attempt counter.
   const sub = input.hook_event_name === 'SubagentStop' ? String(input.agent_id || input.agent_type || 'subagent') : null;
   const subagents = { ...(state.subagents || {}) };
-  const slot = sub ? { ...(subagents[sub] || {}) } : { attempts: state.attempts, releasedFp: state.releasedFp };
+  const slot = sub ? { ...(subagents[sub] || {}) } : { attempts: state.attempts, releasedFp: state.releasedFp, lastBlockFp: state.lastBlockFp, lastListed: state.lastListed };
   if (sub ? input.stop_hook_active === false : !input.stop_hook_active) slot.attempts = 0;
   const who0 = sub ? `el subagente ${input.agent_type || sub}` : 'Claude';
 
@@ -65,6 +65,19 @@ function main() {
   const max = Number(cfg.maxAttempts) || 3;
   // Already released (summary shown) on this exact tree: don't pay another compile to say the same thing.
   if ((slot.attempts || 0) >= max && slot.releasedFp === fp) { debug('ya liberado en este árbol'); return 0; }
+
+  // Blocked before and nothing changed since: Claude chose not to (or can't) fix it.
+  // Recompiling would only repeat the same errors, so release now with the saved list.
+  if ((slot.attempts || 0) > 0 && slot.lastBlockFp === fp) {
+    const fresh = env.readState(root);
+    const next = { ...fresh, lastRun: new Date().toISOString(), history: env.appendHistory(fresh, { status: 'released', reason: 'sin cambios tras el bloqueo', attempt: slot.attempts, ...(sub ? { agent: input.agent_type || sub } : {}) }, HISTORY) };
+    const released = { ...slot, attempts: max, releasedFp: fp };
+    if (sub) next.subagents = { ...(fresh.subagents || {}), [sub]: released }; else Object.assign(next, { attempts: max, releasedFp: fp });
+    env.writeState(root, next);
+    say(`aldc-verify: ${who0} no ha cambiado nada tras el bloqueo; dejo parar. Sigue sin compilar:
+${slot.lastListed || '(ver .claude/.aldc-verify/last-report.json)'}`);
+    return 0;
+  }
 
   const result = env.verifyAll(root, { analyzers: false });
   debug(`verifyAll: ${result.status}`);
@@ -93,7 +106,19 @@ function main() {
     return 0;
   }
   if (result.status === 'green') {
-    save({ attempts: 0, releasedFp: null }, { lastGreen: fp, ...(sub ? {} : { attempts: 0, releasedFp: null }) }, { status: 'green', afterBlocks: slot.attempts || 0 });
+    const afterBlocks = slot.attempts || 0;
+    save({ attempts: 0, releasedFp: null, lastBlockFp: null, lastListed: null }, { lastGreen: fp, ...(sub ? {} : { attempts: 0, releasedFp: null }) }, { status: 'green', afterBlocks });
+    if (afterBlocks > 0) {
+      // Green after this gate blocked: tell the model once, so its final answer reflects the
+      // real result. The next stop sees lastGreen === fp and exits immediately.
+      process.stdout.write(JSON.stringify({
+        decision: 'block',
+        reason: `aldc-verify: ahora compila en verde (BC ${result.bcMajor}, ${who}). ${summary(result)}. ` +
+          'No hace falta volver a compilar. Termina tu respuesta citando este resultado.',
+        systemMessage: `aldc-verify: compila tras ${afterBlocks} ${afterBlocks === 1 ? 'bloqueo' : 'bloqueos'}. ${summary(result)}.`,
+      }));
+      return 0;
+    }
     say(`aldc-verify: compila (BC ${result.bcMajor}, ${who}). ${summary(result)}.`);
     return 0;
   }
@@ -114,14 +139,13 @@ ${formatErrors(root, result.results)}`);
 ${listed}`);
     return 0;
   }
-  save({ attempts }, {}, { status: 'blocked', attempt: attempts, errorCodes });
+  save({ attempts, lastBlockFp: fp, lastListed: listed.slice(0, 4000) }, {}, { status: 'blocked', attempt: attempts, errorCodes });
   process.stderr.write(
     `aldc-verify: la compilación AL falla (BC ${result.bcMajor}, ${who}; intento ${attempts}/${max}). ` +
     `Corrige estos errores antes de terminar y no des el trabajo por bueno hasta que compile:
 ${listed}
 ` +
-    `Cuando creas que está corregido, ejecuta /aldc-verify:al-verify --l1 y cita su resultado en tu respuesta final: ` +
-    `si compila en verde, este gate no te volverá a parar.
+    `Cuando lo corrijas, termina sin más: este gate vuelve a compilar al parar y te dirá el resultado.
 `
   );
   return 2;

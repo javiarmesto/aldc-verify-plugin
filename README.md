@@ -32,7 +32,7 @@ También se puede activar por repo en `.claude/settings.json`. Con esto en modo 
 
 ## Estado
 
-v0.2.0: la fase 1 completa.
+v0.2.2: la fase 1 completa, probada en dos repos (BC 27 y BC 28).
 
 | Pieza | Qué hace |
 |---|---|
@@ -129,6 +129,16 @@ Las DLL se resuelven junto a `alc` (carpeta `bin\` de la extensión). Los warnin
 | Ruleset con AA0137 → Error | App en rojo con 1 error y Test not-run por dependencia; exit 1 |
 | `claude -p "/aldc-verify:al-verify"` sobre regresión conocida (commit anterior a un fix) | Informa de los 3 errores de la línea 111, no edita y el gate no bloquea (turno sin cambios en AL) |
 | Ídem, pero con "no toques nada más" | Claude respeta la restricción, agota los 3 intentos y explica el error preexistente |
+
+### v0.2.2 (Windows, 15/10/2026): segundo repo, SalesMargin (BC 28, `.alpackages` ignorado por git, trabajando en un worktree)
+
+| Caso | Resultado |
+|---|---|
+| `init` dry-run | **Antes:** BC 27 (la mínima de los `app.json`) y rama `test/aldc-evidence` (`origin/HEAD` local desfasado). **Ahora:** BC 28 (la de la app principal), rama `main` (preguntando al remoto), y los planes en `.github/plans` y `.claude/plans` |
+| `init` y CI | Omite la CI con razón: los símbolos no están versionados |
+| L1+L2 desde el worktree | **Antes:** sin símbolos. **Ahora:** los toma del checkout principal. App con 0 errores y 3 de analizadores (incluido PTE0020 en `app.json`); Test con 0 errores y 2 |
+| Gate con un error inyectado y Claude que no lo arregla | **Antes:** 3 compilaciones hasta soltar. **Ahora:** si tras un bloqueo no cambia nada, suelta al momento sin recompilar |
+| Verde después de bloquear | Le devuelve el verde a Claude una vez (`decision: block` con el resultado), para que su respuesta final lo cite. Probado simulado; en sesión real, not-run |
 
 ### v0.2.0 (Windows, 15/10/2026)
 
