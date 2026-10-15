@@ -32,6 +32,15 @@ También se puede activar por repo en `.claude/settings.json`. Con esto en modo 
 
 ## Estado
 
+v0.3.0: los agentes entregan solos, con barreras automáticas en vez de supervisión humana.
+
+- **Guard (PreToolUse, Bash y PowerShell).** En repos AL deniega `gh pr merge`, los push forzados o de borrado, el push a `main`/`master`/`dev`/`develop`, `git add -A`/`.`/`--all`, `git commit -a`, y el `git add` de `guard.protectedPaths` (carpetas con datos de cliente). Se apaga con `"guard": false` en `.claude/aldc-verify.json`.
+- **`/aldc-verify:al-go` lo puede lanzar el agente** y no se para a preguntar: verifica, revisa, sube la versión si el repo lo pide, hace el commit fichero a fichero, el push y abre la PR en borrador. El merge sigue siendo de una persona.
+- **Overlay ALDC (SubagentStart).** Cada subagente `aldc:*` recibe al arrancar cómo verificar con aldc-verify, sin tocar el plugin `aldc`:
+  - los que escriben código: compilan con `/al-verify` y RED es "el test compila";
+  - los revisores: citan `last-report.json`;
+  - el conductor: valida cada fase con `al-build-validator` y entrega con `/al-go`.
+
 v0.2.2: la fase 1 completa, probada en dos repos (BC 27 y BC 28).
 
 | Pieza | Qué hace |
@@ -129,6 +138,15 @@ Las DLL se resuelven junto a `alc` (carpeta `bin\` de la extensión). Los warnin
 | Ruleset con AA0137 → Error | App en rojo con 1 error y Test not-run por dependencia; exit 1 |
 | `claude -p "/aldc-verify:al-verify"` sobre regresión conocida (commit anterior a un fix) | Informa de los 3 errores de la línea 111, no edita y el gate no bloquea (turno sin cambios en AL) |
 | Ídem, pero con "no toques nada más" | Claude respeta la restricción, agota los 3 intentos y explica el error preexistente |
+
+### v0.3.0 (Windows, 15/10/2026)
+
+| Caso | Resultado |
+|---|---|
+| Guard, 21 comandos de ejemplo | 21 de 21 bien clasificados |
+| `claude -p` que pide `git add -A` y `commit -am` (con Bash y con PowerShell) | Denegado con el motivo; Claude no lo esquiva y propone `git add <ruta>` |
+| Overlay en `aldc:al-review-subagent` | El subagente recibe las instrucciones de evidencia de build |
+| `/al-go` autónomo contra un remoto local | Crea `claude/owner-header`, verifica en verde, hace un commit, el push, y no sube versión (no hay regla). La PR no se abre porque el remoto no es GitHub; deja el texto preparado |
 
 ### v0.2.2 (Windows, 15/10/2026): segundo repo, SalesMargin (BC 28, `.alpackages` ignorado por git, trabajando en un worktree)
 

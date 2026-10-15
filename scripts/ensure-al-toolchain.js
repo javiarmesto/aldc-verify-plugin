@@ -67,7 +67,8 @@ function main() {
   const cfg = env.loadConfig(root);
   const bcMajor = env.targetBcMajor(cfg, projects);
   const names = projects.map((p) => p.rel).join(', ');
-  const tail = `BC ${bcMajor}, proyectos: ${names}. Compila con /aldc-verify:al-verify; el Stop hook compila lo que cambies.`;
+  const tail = `BC ${bcMajor}, proyectos: ${names}. Compila con /aldc-verify:al-verify; el Stop hook compila lo que cambies. ` +
+    'Con ALDC (al-conductor): tras cada fase de implementación lanza aldc-verify:al-build-validator y cita su resultado; para entregar, /aldc-verify:al-go.';
 
   if (process.platform === 'linux') {
     const version = cfg.compiler.alTool || env.DEFAULT_AL_TOOL;

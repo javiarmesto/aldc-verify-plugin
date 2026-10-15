@@ -1,22 +1,21 @@
 ---
 name: al-go
-description: Ship the current AL work - verify (compile + analyzers), optional BCQuality review, commit file by file, push and open a draft PR. Has side effects, so it only runs when the user invokes it.
+description: Ship finished AL work without waiting for a human - verify (compile + analyzers), BCQuality review if installed, commit file by file, push a claude/ branch and open a draft PR. Use when a task's AL changes are complete and you want them delivered for review; the guard hook blocks merges, force pushes and pushes to the default branch.
 argument-hint: "[branch-slug] [--no-review]"
-disable-model-invocation: true
-allowed-tools: Bash(node:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Read, Grep, Glob
+allowed-tools: Bash(node:*), Bash(git status:*), Bash(git diff:*), Bash(git log:*), Bash(git branch:*), Bash(git rev-parse:*), Bash(git switch:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(gh pr create:*), Bash(gh pr view:*), Read, Grep, Glob, Edit
 ---
 
 # /al-go - verify -> review -> commit -> push -> draft PR
 
-The AL counterpart of a "go" command. Run every step in order and stop at the first one that fails. Talk to the user in Spanish; commit messages and PR titles follow the repo's existing style (`git log --oneline -15`).
+The AL counterpart of a "go" command. You (or the agent that invoked this) decide and act. **Do not stop to ask the user** unless a step below says to stop. The safety net is mechanical: the aldc-verify guard hook refuses merges, force pushes, pushes to the default branch, mass `git add` and protected (customer) paths. If it denies a command, do not work around it: fix your approach or stop and report.
 
-The repo's own `CLAUDE.md` rules take precedence over this skill. Read it first if it exists.
+The repo's own `CLAUDE.md` rules take precedence over this skill. Read it first if it exists. Report in Spanish. Commit messages and PR titles follow the repo's existing style (`git log --oneline -15`).
 
-## 1. Where am I
+## 1. Branch
 
-- `git status --short`, `git branch --show-current` and the default branch (`git rev-parse --abbrev-ref origin/HEAD`).
-- **On the default branch** (main/master/DEV): create `claude/<slug>`. Use the first argument as the slug, or derive a short kebab-case slug from the work. Never commit to the default branch.
-- **Nothing changed** (`git status` clean and no commits ahead of the base): say so and stop.
+- Run `git status --short`, `git branch --show-current`, and find the default branch (`git rev-parse --abbrev-ref origin/HEAD`, or `main`).
+- On the default branch: `git switch -c claude/<slug>`. The slug is the first argument, or a short kebab-case name for the work.
+- If nothing changed and no commits are ahead of the base, say so and stop.
 
 ## 2. Verify (blocking)
 
@@ -24,40 +23,45 @@ The repo's own `CLAUDE.md` rules take precedence over this skill. Read it first 
 node "${CLAUDE_PLUGIN_ROOT}/scripts/al-verify.js"
 ```
 
-- Exit `1` (errors) or `3` (not-run): stop. Report the summary and do not commit.
-- `Estado: partial` (L2 incomplete): say so, then continue.
-- Exit `0`: keep the per-project summary line for the PR.
+- Exit `1` (errors): fix the errors in code you changed and run it again, at most 3 rounds. If errors remain, or they are pre-existing, stop without committing and report them.
+- Exit `3` (not-run): stop and report. Nothing gets shipped unverified.
+- `Estado: partial` (L2 incomplete): continue, and say so in the PR.
 
-## 3. Version (when AL changed)
+## 3. Version
 
-If any `.al` file under a non-test project changed compared with the base branch (`git diff --name-only origin/<base>...` plus the working tree), check that project's `app.json` `version`. If it is the same as on the base branch and the repo rules say the version goes up on every delivery, **ask** the user before bumping it (usually the last part, +1). Never bump a Test app unless asked.
+If `.al` files changed in a non-test project and the repo rules require a version bump on every delivery, bump that project's `app.json` `version` (last part +1), unless it is already higher than on the base branch. Without such a rule, do not bump; mention the current version in the PR. Never bump a Test app.
 
 ## 4. Review (skip with `--no-review`)
 
-If a BCQuality review skill is available (`bcquality:al-code-review`, or `aldc:review` from ALDC), run it on the changed AL files. Report blocking findings and ask whether to continue. Without a review skill, say "revisión: not-run (sin BCQuality)" and continue.
+If a BCQuality review skill is available (`bcquality:al-code-review`, or `aldc:review`), run it on the changed AL files.
+
+- **Blocking findings in your own changes:** fix them, then go back to step 2 (once).
+- **Findings in pre-existing code:** list them in the PR. Do not fix them.
+- **No review skill:** write "revisión: not-run (sin BCQuality)".
 
 ## 5. Commit, file by file
 
-- List the changed and untracked files. **Never** use `git add -A`, `git add .` or `git commit -a`.
-- Exclude:
+- `git add <path>` for each changed file. Never use `-A`, `.` or `commit -a`; the guard denies them.
+- **Automatically exclude:**
   - build output (`*.app` outside `.alpackages`, `.claude/.aldc-verify/`);
-  - customer data folders and documents (for example `CustomerDocuments/`, `*.xlsx`/`*.pdf`/`*.zip` that are not test fixtures);
+  - the paths in `guard.protectedPaths` of `.claude/aldc-verify.json`;
+  - customer documents (`*.xlsx`, `*.pdf`, `*.zip`, `*.csv` that are not test fixtures);
   - anything that looks like a secret.
-  When in doubt, ask.
-- Show the exact list you will stage and wait for the user's OK. Then `git add <path>` for each file.
-- If the repo follows TDD with "test commit before code commit" and both test and code files changed, make two commits: tests first, then code.
-- Commit message: the repo's style, plus the attribution lines the environment specifies. No model identifiers.
+- **If unsure about a file:** leave it out and list it in the PR as "no incluido".
+- **TDD repos** (test commit before code commit): with test and code changes, make two commits, tests first.
+- **Commit message:** the repo's style, plus the attribution lines the environment specifies. No model identifiers.
 
 ## 6. Push and draft PR
 
-- `git push -u origin <branch>`. If GitHub rejects it for email privacy, tell the user and stop. Do not rewrite their identity unasked.
-- Create a **draft** PR with `gh pr create --draft --base <base>`. The body contains:
-  - a short summary of the change;
-  - the verify line from step 2 (per project: errors / warnings / analyzers);
-  - the review result from step 4;
-  - anything that is **not-run** (for example tests, which need a BC v28+ sandbox).
-- Never merge. Never mark the PR ready.
+- `git push -u origin <branch>`. On a GitHub email-privacy rejection, stop and report. Never change the user's identity unasked.
+- `gh pr create --draft --base <base>`. The body has:
+  - what changed;
+  - the verify line per project;
+  - the review result;
+  - excluded files;
+  - what is not-run (tests without a BC v28+ sandbox).
+- Never merge and never mark the PR ready: a person reviews it.
 
 ## 7. Report
 
-At most 6 lines: branch, commits, verify result, review result, PR link, and what is still not-run.
+At most 6 lines: branch, commits, verify, review, PR link, and anything not-run or excluded.
