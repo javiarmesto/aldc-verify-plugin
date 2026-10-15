@@ -62,12 +62,22 @@ function main() {
   const compiler = env.findCompiler({ compiler: {} });
   const alExtension = a.alExtension || (compiler.source === 'vscode' ? compiler.version.split('.').slice(0, 2).join('.') : null);
   const alTool = a.alTool || env.DEFAULT_AL_TOOL;
+  // What the repo will actually use: an existing pin wins over what is detected on this machine.
+  const effective = {
+    bcMajor: cfg.bcMajor || bcMajor,
+    alExtension: (cfg.compiler && cfg.compiler.alExtension) || alExtension,
+    alTool: (cfg.compiler && cfg.compiler.alTool) || alTool,
+    source: fs.existsSync(path.join(root, '.claude', 'aldc-verify.json')) ? 'fijado en .claude/aldc-verify.json' : 'detectado; se fijará',
+  };
+  // Repo name from the origin remote (a worktree folder name is not the repo name).
+  const remote = git(root, ['remote', 'get-url', 'origin']);
+  const repoName = (remote && remote.replace(/\.git$/, '').split(/[\/:]/).pop()) || path.basename(root);
   const defaultBranch = (git(root, ['rev-parse', '--abbrev-ref', 'origin/HEAD']) || 'origin/main').replace(/^origin\//, '');
   const plansRoot = ['.github/plans', '.claude/plans', 'docs/plans'].find((p) => fs.existsSync(path.join(root, p))) || '.github/plans';
   const hasSymbols = projects.some((p) => { try { return fs.readdirSync(path.join(p.dir, '.alpackages')).some((f) => f.endsWith('.app')); } catch { return false; } });
   const vars = {
-    REPO_NAME: path.basename(root), BC_MAJOR: String(bcMajor), PROJECTS: projects.map((p) => `\`${p.rel}\` (${p.manifest.name})`).join(', '),
-    PLANS_ROOT: plansRoot, DEFAULT_BRANCH: defaultBranch, AL_TOOL: alTool, PLUGIN_REF,
+    REPO_NAME: repoName, BC_MAJOR: String(effective.bcMajor), PROJECTS: projects.map((p) => `\`${p.rel}\` (${p.manifest.name})`).join(', '),
+    PLANS_ROOT: plansRoot, DEFAULT_BRANCH: defaultBranch, AL_TOOL: effective.alTool, PLUGIN_REF,
   };
 
   const out = [];
@@ -125,7 +135,7 @@ function main() {
   else write(ciRel, fill(fs.readFileSync(path.join(PLUGIN_ROOT, 'templates', 'github', 'al-compile.yml'), 'utf8'), vars), 'created');
 
   console.log(`aldc-verify init${a.dryRun ? ' (dry-run)' : ''}: ${root}`);
-  console.log(`BC ${bcMajor} · proyectos: ${projects.map((p) => p.rel).join(', ')} · alExtension ${alExtension || '-'} · alTool ${alTool} · planes ${plansRoot} · rama ${defaultBranch}`);
+  console.log(`${repoName} · BC ${effective.bcMajor} · proyectos: ${projects.map((p) => p.rel).join(', ')} · alExtension ${effective.alExtension || '-'} · alTool ${effective.alTool} (${effective.source}) · planes ${plansRoot} · rama ${defaultBranch}`);
   for (const l of out) console.log(`- ${l}`);
   return 0;
 }
