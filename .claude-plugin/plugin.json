@@ -1,0 +1,12 @@
+{
+  "name": "aldc-verify",
+  "displayName": "ALDC Verify",
+  "version": "0.1.0",
+  "description": "Verifiable AL loop for Business Central: compile, analyzers and a Stop gate so the agent checks its own work before finishing.",
+  "author": {
+    "name": "javiarmesto",
+    "url": "https://github.com/javiarmesto"
+  },
+  "license": "MIT",
+  "keywords": ["AL", "Business Central", "verification", "compile", "hooks"]
+}

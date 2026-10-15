@@ -1,0 +1,15 @@
+{
+  "name": "aldc-verify-dev",
+  "owner": {
+    "name": "javiarmesto",
+    "url": "https://github.com/javiarmesto"
+  },
+  "description": "Personal marketplace for developing the aldc-verify plugin before deciding whether it joins ALDC.",
+  "plugins": [
+    {
+      "name": "aldc-verify",
+      "source": "./",
+      "description": "Verifiable AL loop for Business Central: compile, analyzers and a Stop gate."
+    }
+  ]
+}
