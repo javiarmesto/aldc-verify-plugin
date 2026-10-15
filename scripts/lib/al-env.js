@@ -85,6 +85,28 @@ function compareVersions(a, b) {
   return 0;
 }
 
+// The dotnet tool keeps the analyzer DLLs in its store:
+// ~/.dotnet/tools/.store/<pkg>/<ver>/<pkg>/<ver>/tools/<tfm>/any/. Prefer the pinned version and net8.0.
+function dotnetToolBinDir(home, pinnedVersion) {
+  const pkg = 'microsoft.dynamics.businesscentral.development.tools';
+  const store = path.join(home, '.dotnet', 'tools', '.store', pkg);
+  let versions = [];
+  try { versions = fs.readdirSync(store).filter((d) => /^\d/.test(d)); } catch { return null; }
+  versions.sort((a, b) => compareVersions(b, a));
+  if (pinnedVersion && versions.includes(pinnedVersion)) versions = [pinnedVersion, ...versions.filter((v) => v !== pinnedVersion)];
+  for (const v of versions) {
+    const tools = path.join(store, v, pkg, v, 'tools');
+    let tfms = [];
+    try { tfms = fs.readdirSync(tools); } catch { continue; }
+    tfms.sort((a, b) => (a === 'net8.0' ? -1 : b === 'net8.0' ? 1 : a.localeCompare(b)));
+    for (const tfm of tfms) {
+      const dir = path.join(tools, tfm, 'any');
+      if (fs.existsSync(path.join(dir, 'Microsoft.Dynamics.Nav.CodeCop.dll'))) return dir;
+    }
+  }
+  return null;
+}
+
 // Compiler resolution. Per-repo pin wins; an unmatched pin is an error, never a silent fallback.
 function findCompiler(cfg) {
   const c = cfg.compiler || {};
@@ -125,7 +147,7 @@ function findCompiler(cfg) {
   const toolName = process.platform === 'win32' ? 'al.exe' : 'al';
   const toolPath = path.join(home, '.dotnet', 'tools', toolName);
   if (fs.existsSync(toolPath)) {
-    return { cmd: toolPath, args: ['compile'], version: c.alTool || 'dotnet-tool', source: 'dotnet-tool', pinned: !!c.alTool, binDir: null };
+    return { cmd: toolPath, args: ['compile'], version: c.alTool || 'dotnet-tool', source: 'dotnet-tool', pinned: !!c.alTool, binDir: dotnetToolBinDir(home, c.alTool) };
   }
   if (c.alTool) return { error: `no encuentro la herramienta dotnet 'al' fijada (alTool ${c.alTool})` };
 
@@ -266,7 +288,7 @@ function analyzerSettings(root, project, cfg, compiler) {
   else if (vs['al.ruleSetPath']) ruleset = path.resolve(project.dir, vs['al.ruleSetPath']);
   if (ruleset && !fs.existsSync(ruleset)) ruleset = null;
   const dlls = resolveAnalyzers(names, compiler);
-  return { dlls, names: dlls.map((d) => path.basename(d).replace(/^Microsoft\.Dynamics\.Nav\.|\.dll$/g, '')), source, ruleset, missing: names.length - dlls.length };
+  return { dlls, names: dlls.map((d) => path.basename(d).replace(/^Microsoft\.Dynamics\.Nav\.|\.dll$/g, '')), requested: names.map(String), source, ruleset, missing: names.length - dlls.length };
 }
 
 // Compile every project in dependency order. Downstream projects are skipped when an upstream one fails.

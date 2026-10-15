@@ -48,7 +48,7 @@ function main() {
     projects: result.results.map((r) => ({
       project: r.project.rel, name: r.project.manifest.name, skipped: r.skipped || null,
       seconds: r.seconds, exitCode: r.exitCode,
-      analyzers: r.l2 ? { names: r.l2.names, source: r.l2.source, ruleset: r.l2.ruleset } : null,
+      analyzers: r.l2 ? { names: r.l2.names, requested: r.l2.requested, missing: r.l2.missing, source: r.l2.source, ruleset: r.l2.ruleset } : null,
       errors: (r.errors || []).map((d) => ({ ...d, file: d.file && rel(root, d.file) })),
       warnings: (r.warnings || []).map((d) => ({ ...d, file: d.file && rel(root, d.file) })),
     })),
@@ -71,6 +71,7 @@ function main() {
   out.push(`aldc-verify ${level}: BC ${result.bcMajor}, alc ${c.version}${c.pinned ? '' : ' (sin fijar en .claude/aldc-verify.json)'}`);
   const allErrors = [];
   const allWarnings = [];
+  let l2Incomplete = false;
   for (const p of report.projects) {
     if (p.skipped) { out.push(`- ${p.name} (${p.project}): not-run, ${p.skipped}`); continue; }
     const compilerWarn = p.warnings.filter((w) => /^AL/i.test(w.code));
@@ -80,6 +81,10 @@ function main() {
       ? ` · ${analyzerWarn.length} de analizadores [${p.analyzers.names.join(', ')}; ${p.analyzers.source}${p.analyzers.ruleset ? `; ruleset ${rel(root, p.analyzers.ruleset)}` : ''}]`
       : '';
     out.push(`${mark} ${p.name} (${p.project}): ${p.errors.length} errores · ${compilerWarn.length} warnings del compilador${l2} · ${p.seconds.toFixed(1)} s`);
+    if (p.analyzers && p.analyzers.missing) {
+      out.push(`    ⚠ L2 incompleto: no encuentro ${p.analyzers.missing} de ${p.analyzers.requested.length} analizadores (${p.analyzers.requested.join(', ')}) junto a alc`);
+      l2Incomplete = true;
+    }
     if (p.warnings.length) out.push(`    ${countBy(p.warnings, 'code').slice(0, 10).map(([k, n]) => `${k}×${n}`).join(', ')}`);
     if (p.exitCode !== 0 && !p.errors.length) out.push('    alc terminó con error sin diagnósticos (ver last-report.json)');
     allErrors.push(...p.errors);
@@ -94,6 +99,7 @@ function main() {
     out.push('', `Warnings (primeros ${Math.min(MAX_WARNINGS, allWarnings.length)} de ${allWarnings.length}):`);
     for (const w of allWarnings.slice(0, MAX_WARNINGS)) out.push(`  ${w.file}(${w.line},${w.col}): ${w.code}: ${w.message.length > 120 ? w.message.slice(0, 117) + '…' : w.message}`);
   }
+  if (l2Incomplete) out.push('', 'Estado: partial. L1 vale, pero L2 no se ha ejecutado completo: no digas que los analizadores pasan.');
   out.push('', `Detalle completo: ${rel(root, path.join(dir, 'last-report.json'))}`);
   console.log(out.join('\n'));
   return allErrors.length ? 1 : 0;

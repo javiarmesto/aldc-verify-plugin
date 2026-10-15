@@ -9,7 +9,15 @@ claude plugin marketplace add javiarmesto/aldc-verify-plugin
 claude plugin install aldc-verify@aldc-verify-dev
 ```
 
-También se puede activar por repo en `.claude/settings.json`:
+**En entornos cloud** (claude.ai/code): una sesión cloud arranca en su propia rama y `claude -p` no registra `extraKnownMarketplaces` (CLI 2.1.300, comprobado el 15/10/2026). Lo que funciona es añadir al **setup script del entorno**:
+
+```bash
+claude plugin marketplace add javiarmesto/aldc-verify-plugin && claude plugin install aldc-verify@aldc-verify-dev
+```
+
+Tarda unos 2 s. Después, el SessionStart instala dotnet8 y `al` (unos 22 s la primera vez y 50 ms en caliente).
+
+También se puede activar por repo en `.claude/settings.json`. Con esto en modo interactivo se ofrece instalarlo tras aceptar la confianza del proyecto (sin verificar); en headless y en cloud, no:
 
 ```json
 {
@@ -20,7 +28,7 @@ También se puede activar por repo en `.claude/settings.json`:
 
 ## Estado
 
-v0.1.0. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+L2) y el **SessionStart** del toolchain. Faltan `al-build-validator`, `/al-go`, `/al-learn` y las plantillas.
+v0.1.1. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+L2) y el **SessionStart** del toolchain. Faltan `al-build-validator`, `/al-go`, `/al-learn` y las plantillas.
 
 ## Stop gate
 
@@ -32,11 +40,11 @@ v0.1.0. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+
 4. Si no coincide, compila todos los proyectos en orden de dependencias (App antes que Test). Cada proyecto usa un package cache filtrado en `.claude/.aldc-verify/cache/`:
    - Símbolos Microsoft: la versión mayor de BC objetivo si existe; si no, la que haya.
    - Apps del propio repo: se descartan los símbolos viejos y se usa la `.app` recién compilada.
-5. Con errores, `exit 2` y la lista por stderr (como mucho 40). Claude sigue corrigiendo.
-6. Si tras `maxAttempts` (3) bloqueos seguidos sigue rojo, deja parar y avisa al usuario con los errores pendientes. El contador se reinicia en cada parada nueva (`stop_hook_active=false`).
+5. Con errores, `exit 2` y la lista por stderr (como mucho 40). Claude sigue corrigiendo. El mensaje le pide confirmar con `/aldc-verify:al-verify --l1` y citar el resultado, porque el verde final del gate solo lo ve el usuario, no el modelo.
+6. Si tras `maxAttempts` (3) bloqueos seguidos sigue rojo, deja parar y avisa al usuario con los errores pendientes. Una vez dado ese resumen, mientras el árbol no cambie no vuelve a compilar (`releasedFp`). El contador se reinicia en cada parada nueva (`stop_hook_active=false`).
 7. Si no hay compilador, faltan símbolos o alc falla sin dar diagnósticos, muestra `not-run` o `verificación incompleta` y **no bloquea**.
 
-El estado y la caché van en `.claude/.aldc-verify/`, que hay que añadir al `.gitignore` del repo.
+`state.json` guarda un `history` con los últimos 20 eventos (`blocked`, `released`, `green`, `not-run`…, con `attempt` y `errorCodes`), para auditar cuántas veces bloqueó. El estado y la caché van en `.claude/.aldc-verify/`, que hay que añadir al `.gitignore` del repo.
 
 ### Configuración por repo: `.claude/aldc-verify.json` (opcional)
 
@@ -63,7 +71,8 @@ El estado y la caché van en `.claude/.aldc-verify/`, que hay que añadir al `.g
   - Si ya está la herramienta `al` en la versión fijada (`compiler.alTool`, por defecto 18.1.43.24897), sale en menos de 1 s.
   - Si no, instala `dotnet8` con apt (o `dotnet-sdk-8.0` si falla) y `dotnet tool install --global Microsoft.Dynamics.BusinessCentral.Development.Tools --version <alTool>`.
   - Si había otra versión instalada, la cambia por la fijada.
-  - Añade `~/.dotnet/tools` al PATH con `CLAUDE_ENV_FILE`.
+  - Añade `~/.dotnet/tools` al PATH con `CLAUDE_ENV_FILE`, así que solo vale dentro de la sesión. Si ejecutas el script a mano, `al` no queda en el PATH. El plugin no lo necesita: usa la ruta absoluta.
+  - Los analizadores de la herramienta están en `~/.dotnet/tools/.store/…/tools/net8.0/any/` y L2 los busca allí.
 - **Salida:** una línea de contexto para Claude con el compilador, la versión de BC y los proyectos. El usuario solo ve un mensaje cuando se instala algo o hay un fallo.
 
 ## /al-verify (L1+L2)
@@ -95,7 +104,17 @@ Las DLL se resuelven junto a `alc` (carpeta `bin\` de la extensión). Los warnin
 | `claude -p "/aldc-verify:al-verify"` sobre regresión conocida (commit anterior a un fix) | Informa de los 3 errores de la línea 111, no edita y el gate no bloquea (turno sin cambios en AL) |
 | Ídem, pero con "no toques nada más" | Claude respeta la restricción, agota los 3 intentos y explica el error preexistente |
 
-Sin probar: Linux/nube con la herramienta dotnet `al`, e instalación desde el marketplace.
+### Nube (Linux, CLI 2.1.300, 15/10/2026, sesión cloud sobre la PR de la capa)
+
+| Caso | Resultado |
+|---|---|
+| SessionStart en frío / en caliente | 21,9 s (apt dotnet8 + dotnet tool al 18.1.43.24897) / 0,05 s |
+| L1 | Igual que en Windows: App con 0 errores (AL0482×2, AL0432) y Test con 0 errores, en unos 15 s |
+| L1+L2 (v0.1.0) | **Fallo:** 0 analizadores sin avisar. Corregido en v0.1.1: se buscan en el `.store` de la herramienta y avisa de `L2 incompleto` |
+| Gate tras verde | 0,06 s, en silencio |
+| Regresión ×5 | Bloquea 3 veces con AL0519 y suelta en la 4.ª, igual que en Windows |
+| Plugin desde `.claude/settings.json` | **No** se carga solo (ni en cloud ni con `-p`). Instalación manual: unos 9 s |
+| `claude -p` real sobre la regresión | Corrige AL0519 y AL0133 sin que se lo pidan y el gate acaba en verde, en 69 s |
 
 ## Hechos verificados en Windows (15/10/2026)
 
