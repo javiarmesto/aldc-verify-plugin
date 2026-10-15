@@ -1,0 +1,25 @@
+{
+  "extraKnownMarketplaces": {
+    "aldc-verify-dev": {
+      "source": { "source": "github", "repo": "javiarmesto/aldc-verify-plugin" }
+    }
+  },
+  "enabledPlugins": {
+    "aldc-verify@aldc-verify-dev": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(al compile:*)"
+    ],
+    "deny": [
+      "Bash(git add -A:*)",
+      "Bash(git add .:*)",
+      "Bash(git commit -a:*)",
+      "Bash(git push --force:*)"
+    ]
+  }
+}

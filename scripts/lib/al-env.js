@@ -267,7 +267,18 @@ function ensureStateDir(root) {
 }
 
 function appendHistory(state, event, max = 20) {
-  return [...(state.history || []), { at: new Date().toISOString(), ...event }].slice(-max);
+  return [...(state.history || []), { at: new Date().toISOString(), pid: process.pid, ...event }].slice(-max);
+}
+
+// Remove run folders left by crashed or killed runs (older than one hour).
+function pruneRuns(dir) {
+  let entries = [];
+  try { entries = fs.readdirSync(dir); } catch { return; }
+  const cutoff = Date.now() - 3600 * 1000;
+  for (const e of entries) {
+    const full = path.join(dir, e);
+    try { if (fs.statSync(full).mtimeMs < cutoff) fs.rmSync(full, { recursive: true, force: true }); } catch { /* in use */ }
+  }
 }
 
 function resolveAnalyzers(names, compiler) {
@@ -309,7 +320,7 @@ function analyzerSettings(root, project, cfg, compiler) {
 
 // Compile every project in dependency order. Downstream projects are skipped when an upstream one fails.
 // opts.analyzers: false (L1 only) or true (L1+L2 with per-project analyzer settings).
-function verifyAll(root, opts = {}) {
+function verifyAllUnlocked(root, opts = {}) {
   const cfg = loadConfig(root);
   let projects = findProjects(root);
   if (!projects.length) return { status: 'no-projects', projects: [] };
@@ -326,6 +337,10 @@ function verifyAll(root, opts = {}) {
   }
 
   ensureStateDir(root);
+  // Each run gets its own cache/output folder: concurrent gates (main session + subagent,
+  // or two installs of the plugin) must never delete each other's symbols mid-compile.
+  const runDir = path.join(root, STATE_DIR, 'run', `${process.pid}-${Date.now().toString(36)}`);
+  pruneRuns(path.join(root, STATE_DIR, 'run'));
   const inRepoPrefixes = new Set(projects.map((p) => `${p.manifest.publisher}_${p.manifest.name}`.toLowerCase()));
   const built = new Map();
   const results = [];
@@ -333,13 +348,13 @@ function verifyAll(root, opts = {}) {
     const failedDep = (p.inRepoDeps || []).find((d) => !built.has(d));
     if (failedDep) { results.push({ project: p, skipped: `depende de ${failedDep.rel}, que no compila` }); continue; }
     const slug = p.rel.replace(/[\\/:. ]+/g, '_') || 'root';
-    const cacheDir = path.join(root, STATE_DIR, 'cache', slug);
+    const cacheDir = path.join(runDir, 'cache', slug);
     const fresh = (p.inRepoDeps || []).flatMap((d) => built.get(d));
     const cache = prepareCache(p, bcMajor, cacheDir, fresh, inRepoPrefixes);
     if (!cache.hadSymbols) { results.push({ project: p, skipped: `no hay símbolos en ${path.join(p.rel, '.alpackages')}` }); continue; }
     const l2 = opts.analyzers ? analyzerSettings(root, p, cfg, compiler) : null;
     const r = compileProject(compiler, p, {
-      cacheDir, outDir: path.join(root, STATE_DIR, 'out', slug), cwd: root,
+      cacheDir, outDir: path.join(runDir, 'out', slug), cwd: root,
       analyzers: l2 ? l2.dlls : [], ruleset: l2 ? l2.ruleset : null,
     });
     results.push({ project: p, l2, ...r });
@@ -349,7 +364,50 @@ function verifyAll(root, opts = {}) {
   const toolFailure = results.some((r) => r.exitCode !== undefined && r.exitCode !== 0 && !r.errors.length);
   const skipped = results.filter((r) => r.skipped);
   const status = errors ? 'red' : toolFailure ? 'tool-failure' : skipped.length ? 'partial' : 'green';
+  try { fs.rmSync(runDir, { recursive: true, force: true }); } catch { /* best effort */ }
   return { status, results, compiler, bcMajor, cfg, projects };
+}
+
+// One compile per repo at a time: two alc processes on the same project collide on the
+// files alc writes inside the project folder and fail without diagnostics.
+function verifyAll(root, opts = {}) {
+  const lock = acquireLock(root, opts.lockTimeoutMs || 300000);
+  if (!lock) return { status: 'not-run', reason: 'otra compilación de este repo sigue en marcha tras 5 min de espera', projects: findProjects(root) };
+  try { return verifyAllUnlocked(root, opts); } finally { releaseLock(lock); }
+}
+
+function sleepMs(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
+
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+}
+
+function acquireLock(root, timeoutMs) {
+  const file = path.join(ensureStateDir(root), 'compile.lock');
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const fd = fs.openSync(file, 'wx');
+      fs.writeSync(fd, JSON.stringify({ pid: process.pid, at: Date.now() }));
+      fs.closeSync(fd);
+      return file;
+    } catch (e) {
+      if (e.code !== 'EEXIST') return file; // can't lock (read-only?): run unlocked rather than block
+      let holder = {};
+      try { holder = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* being written */ }
+      const stale = holder.pid ? (!pidAlive(holder.pid) || Date.now() - holder.at > 15 * 60 * 1000) : false;
+      if (stale) { try { fs.rmSync(file, { force: true }); } catch { /* raced */ } continue; }
+      if (Date.now() > deadline) return null;
+      sleepMs(500);
+    }
+  }
+}
+
+function releaseLock(file) {
+  try {
+    const holder = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (holder.pid === process.pid) fs.rmSync(file, { force: true });
+  } catch { /* already gone */ }
 }
 
 module.exports = { STATE_DIR, DEFAULT_AL_TOOL, loadConfig, findProjects, findCompiler, targetBcMajor, fingerprint, readState, writeState, ensureStateDir, appendHistory, verifyAll };

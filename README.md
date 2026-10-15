@@ -32,7 +32,20 @@ También se puede activar por repo en `.claude/settings.json`. Con esto en modo 
 
 ## Estado
 
-v0.1.2. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+L2) y el **SessionStart** del toolchain. Faltan `al-build-validator`, `/al-go`, `/al-learn` y las plantillas.
+v0.2.0: la fase 1 completa.
+
+| Pieza | Qué hace |
+|---|---|
+| SessionStart | Asegura el compilador AL: lo detecta en Windows y lo instala en la nube |
+| UserPromptSubmit | Guarda la huella del árbol al empezar cada turno |
+| Stop / **SubagentStop** | Compilan lo que cambió en el turno y bloquean con errores. SubagentStop solo actúa en los subagentes que escriben código (`implement`, `developer`, `builder`) y cada uno lleva su propio contador |
+| `/aldc-verify:al-verify` | L1+L2 bajo demanda. Si lo lanza el usuario, solo informa |
+| Agente `aldc-verify:al-build-validator` | Compila y devuelve los errores agrupados por causa, con un arreglo propuesto. Solo lectura: la salida de alc no llega al contexto principal |
+| `/aldc-verify:al-go` | verify → revisión BCQuality (si está instalada) → commit fichero a fichero → push → PR en borrador. Solo lo lanza el usuario |
+| `/aldc-verify:al-learn` | Tras una corrección, propone **una** línea para el `CLAUDE.md` del repo y solo la escribe si dices que sí |
+| `/aldc-verify:init` | Aplica la capa sin pisar nada: `aldc-verify.json`, `settings.json` (solo añade lo que falta), `CLAUDE.md`, la línea del `.gitignore` y la CI. Primero muestra un dry-run |
+
+**Concurrencia:** las compilaciones de un mismo repo van de una en una, con un lock en `.claude/.aldc-verify/compile.lock` que espera hasta 5 minutos y limpia los locks huérfanos. Cada ejecución usa su propia caché en `run/`, que se borra al terminar. Si dos `alc` compilan el mismo proyecto a la vez, chocan y fallan sin dar diagnósticos.
 
 ## Stop gate
 
@@ -65,6 +78,15 @@ v0.1.2. Hechos y probados: el **Stop gate** (L1), la skill **`/al-verify`** (L1+
 - `compiler.alTool`: versión de la herramienta dotnet `al` (nube y Linux).
 - `compiler.path`: ruta explícita a `alc`. También vale la variable de entorno `ALDC_VERIFY_ALC`.
 - Sin nada fijado, usa la extensión AL más alta instalada y lo indica en el mensaje: "sin fijar".
+
+## Plantillas (`templates/`)
+
+- `CLAUDE.md`: reglas que no se negocian, cómo compilar, warnings conocidos, dónde están los planes y una sección `## Aprendido` para `/al-learn`. Menos de 200 líneas.
+- `settings.json`:
+  - activa el plugin;
+  - permite `git status`, `git diff`, `git log`, `git branch` y `al compile`;
+  - **deniega** `git add -A`, `git add .`, `git commit -a` y `git push --force`.
+- `github/al-compile.yml`: GitHub Actions en ubuntu-latest. Instala dotnet 8 y la herramienta `al` en la versión de `aldc-verify.json`, clona este plugin en el tag de la versión y ejecuta `al-verify.js`. Solo pasa con exit 0. Deja el resumen en el step summary y `last-report.json` como artefacto. `init` solo lo crea si el repo versiona los símbolos.
 
 ## SessionStart: toolchain
 
@@ -107,6 +129,18 @@ Las DLL se resuelven junto a `alc` (carpeta `bin\` de la extensión). Los warnin
 | Ruleset con AA0137 → Error | App en rojo con 1 error y Test not-run por dependencia; exit 1 |
 | `claude -p "/aldc-verify:al-verify"` sobre regresión conocida (commit anterior a un fix) | Informa de los 3 errores de la línea 111, no edita y el gate no bloquea (turno sin cambios en AL) |
 | Ídem, pero con "no toques nada más" | Claude respeta la restricción, agota los 3 intentos y explica el error preexistente |
+
+### v0.2.0 (Windows, 15/10/2026)
+
+| Caso | Resultado |
+|---|---|
+| `init` en una copia limpia: dry-run, aplicar y repetir | Crea los 5 ficheros; al repetir, salta los 5 |
+| `init` con un `settings.json` previo | Solo añade claves; conserva `model` y los permisos existentes |
+| SubagentStop ×5 (`al-implement-subagent`) | 3 bloqueos y suelta en la 4.ª; el contador del principal sigue aparte |
+| 3 compilaciones a la vez (gate principal, gate de subagente y `al-verify`) | Antes del lock: AL1022 o fallo sin diagnósticos. Con el lock: las 3 correctas, 3 de 3 veces |
+| `claude -p` delegando en `aldc:al-developer` | SubagentStop bloquea, el subagente corrige AL0519 y pregunta antes de tocar AL0133, que cambia comportamiento |
+| `claude -p` con `al-build-validator` | Agrupa los 3 diagnósticos en 1 causa y propone un arreglo; no edita nada |
+| CI `al-compile.yml` | **not-run**: no se ha ejecutado en GitHub Actions |
 
 ### Nube (Linux, CLI 2.1.300, 15/10/2026, sesión cloud sobre la PR de la capa)
 

@@ -26,6 +26,19 @@
         ]
       }
     ],
+    "SubagentStop": [
+      {
+        "matcher": ".*(implement|developer|builder).*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/al-verify-gate.js"],
+            "timeout": 600
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
