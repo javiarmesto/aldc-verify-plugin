@@ -118,7 +118,7 @@ El guard sustituye la supervisión humana en lo que no tiene vuelta atrás. Solo
 
 ### Con ALDC: cómo encaja con el plugin de ALDC
 
-Desde el 20 de octubre de 2026, el plugin oficial de ALDC para Claude Code es la 5.1.0 (`aldc@aldc-marketplace`). Recomienda aldc-verify y avisa al empezar la sesión si no está instalado. Los hooks de los dos plugins son independientes: ninguno pisa al otro. La 5.1.1 está en revisión ([PR #130](https://github.com/javiarmesto/ALDC-AL-Development-Collection/pull/130)). El manual de ALDC está en [esta página](https://claude.ai/artifact/Umr3Mp5Bwi1EocmghH3Dv8).
+Desde el 20 de octubre de 2026, el plugin oficial de ALDC para Claude Code es la 5.1.1 (`aldc@aldc-marketplace`). Recomienda aldc-verify y avisa al empezar la sesión si no está instalado. Los hooks de los dos plugins son independientes: ninguno pisa al otro. La 5.1.1 está publicada ([PR #130](https://github.com/javiarmesto/ALDC-AL-Development-Collection/pull/130)). El manual de ALDC está en [esta página](https://claude.ai/artifact/Umr3Mp5Bwi1EocmghH3Dv8).
 
 Lo que une a los dos es el overlay. Cuando arranca un subagente `aldc:*` en un repo AL, aldc-verify le añade unas líneas de contexto según su rol:
 
@@ -310,7 +310,7 @@ The guard replaces human supervision for things that cannot be undone. It only a
 
 ### With ALDC: how it fits with the ALDC plugin
 
-Since 20 October 2026, the official ALDC plugin for Claude Code is 5.1.0 (`aldc@aldc-marketplace`). It recommends aldc-verify and warns at session start if it is not installed. The two plugins' hooks are separate: neither overrides the other. 5.1.1 is in review ([PR #130](https://github.com/javiarmesto/ALDC-AL-Development-Collection/pull/130)). The ALDC manual is on [this page](https://claude.ai/artifact/Umr3Mp5Bwi1EocmghH3Dv8).
+Since 20 October 2026, the official ALDC plugin for Claude Code is 5.1.1 (`aldc@aldc-marketplace`). It recommends aldc-verify and warns at session start if it is not installed. The two plugins' hooks are separate: neither overrides the other. 5.1.1 is released ([PR #130](https://github.com/javiarmesto/ALDC-AL-Development-Collection/pull/130)). The ALDC manual is on [this page](https://claude.ai/artifact/Umr3Mp5Bwi1EocmghH3Dv8).
 
 What joins the two is the overlay. When an `aldc:*` subagent starts in an AL repo, aldc-verify adds a few lines of context by role:
 
