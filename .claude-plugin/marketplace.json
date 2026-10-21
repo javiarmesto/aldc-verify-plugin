@@ -4,7 +4,7 @@
     "name": "javiarmesto",
     "url": "https://github.com/javiarmesto"
   },
-  "description": "Personal marketplace for developing the aldc-verify plugin before deciding whether it joins ALDC.",
+  "description": "Marketplace for the aldc-verify plugin: verifiable AL loop for Business Central in Claude Code.",
   "plugins": [
     {
       "name": "aldc-verify",
