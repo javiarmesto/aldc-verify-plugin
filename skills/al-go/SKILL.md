@@ -7,9 +7,9 @@ allowed-tools: Bash(node:*), Bash(git status:*), Bash(git diff:*), Bash(git log:
 
 # /al-go - verify -> review -> commit -> push -> draft PR
 
-The AL counterpart of a "go" command. You (or the agent that invoked this) decide and act. **Do not stop to ask the user** unless a step below says to stop. The safety net is mechanical: the aldc-verify guard hook refuses merges, force pushes, pushes to the default branch, mass `git add` and protected (customer) paths. If it denies a command, do not work around it: fix your approach or stop and report.
+The AL counterpart of a "go" command. You (or the agent that invoked this) decide and act. **Do not stop to ask the user** unless a step below says to stop. The safety net is mechanical: the aldc-verify guard hook refuses merges, force pushes, pushes to the default branch, mass `git add` and protected paths. If it denies a command, do not work around it: fix your approach or stop and report.
 
-The repo's own `CLAUDE.md` rules take precedence over this skill. Read it first if it exists. Report in Spanish. Commit messages and PR titles follow the repo's existing style (`git log --oneline -15`).
+The repo's own `CLAUDE.md` rules take precedence over this skill. Read it first if it exists. Report in the user's language (the plugin's `language` setting, or the language the user writes in). Commit messages and PR titles follow the repo's existing style (`git log --oneline -15`).
 
 ## 1. Branch
 
@@ -25,7 +25,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/al-verify.js"
 
 - Exit `1` (errors): fix the errors in code you changed and run it again, at most 3 rounds. If errors remain, or they are pre-existing, stop without committing and report them.
 - Exit `3` (not-run): stop and report. Nothing gets shipped unverified.
-- `Estado: partial` (L2 incomplete): continue, and say so in the PR.
+- `Status: partial` (`Estado: partial` in Spanish; L2 incomplete): continue, and say so in the PR.
 
 ## 3. Version
 
@@ -37,7 +37,7 @@ If a BCQuality review skill is available (`bcquality:al-code-review`, or `aldc:r
 
 - **Blocking findings in your own changes:** fix them, then go back to step 2 (once).
 - **Findings in pre-existing code:** list them in the PR. Do not fix them.
-- **No review skill:** write "revisión: not-run (sin BCQuality)".
+- **No review skill:** write "review: not-run (no BCQuality)".
 
 ## 5. Commit, file by file
 
@@ -45,9 +45,9 @@ If a BCQuality review skill is available (`bcquality:al-code-review`, or `aldc:r
 - **Automatically exclude:**
   - build output (`*.app` outside `.alpackages`, `.claude/.aldc-verify/`);
   - the paths in `guard.protectedPaths` of `.claude/aldc-verify.json`;
-  - customer documents (`*.xlsx`, `*.pdf`, `*.zip`, `*.csv` that are not test fixtures);
+  - documents with real data (`*.xlsx`, `*.pdf`, `*.zip`, `*.csv` that are not test fixtures);
   - anything that looks like a secret.
-- **If unsure about a file:** leave it out and list it in the PR as "no incluido".
+- **If unsure about a file:** leave it out and list it in the PR as "not included".
 - **TDD repos** (test commit before code commit): with test and code changes, make two commits, tests first.
 - **Commit message:** the repo's style, plus the attribution lines the environment specifies. No model identifiers.
 
