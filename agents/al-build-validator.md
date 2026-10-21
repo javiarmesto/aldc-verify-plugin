@@ -28,18 +28,18 @@ If the exit code is `3`, stop and report **not-run** with the reason it printed.
    - **introduced**: in code that the caller changed (check `git diff --name-only` and `git diff` for the file);
    - **pre-existing**: anything else.
 
-## Report (your whole answer, in Spanish, at most 25 lines)
+## Report (your whole answer, in the caller's language, at most 25 lines)
 
 ```
-Resultado: verde | rojo | not-run  (BC <major>, alc <version>, L1|L1+L2)
-<Proyecto>: <n> errores · <n> warnings compilador · <n> analizadores   (one line per project; "not-run: <motivo>" if skipped)
+Result: green | red | not-run  (BC <major>, alc <version>, L1|L1+L2)
+<Project>: <n> errors · <n> compiler warnings · <n> analyzers   (one line per project; "not-run: <reason>" if skipped)
 
-Errores (agrupados por causa):
-1. [introduced|pre-existing] <file>(<line>,<col>) <CODE>: <causa en una frase> → <arreglo concreto en una frase>
+Errors (grouped by cause):
+1. [introduced|pre-existing] <file>(<line>,<col>) <CODE>: <cause in one sentence> → <concrete fix in one sentence>
 ...
 
-Warnings en código cambiado: <codes and counts, or "ninguno">
-Detalle: .claude/.aldc-verify/last-report.json
+Warnings in changed code: <codes and counts, or "none">
+Detail: .claude/.aldc-verify/last-report.json
 ```
 
 Do not paste compiler output. Do not list analyzer warnings in unchanged code beyond their counts.
