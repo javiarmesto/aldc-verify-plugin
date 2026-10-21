@@ -7,6 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 const env = require('./lib/al-env');
+const msg = require('./lib/messages');
+const { t } = msg;
 
 const MAX_ERRORS = 30;
 const MAX_WARNINGS = 15;
@@ -35,11 +37,12 @@ function countBy(list, key) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const root = path.resolve(args.root || process.env.CLAUDE_PROJECT_DIR || process.cwd());
+  msg.init(root);
   const result = env.verifyAll(root, { analyzers: !args.l1, only: args.project });
   const level = args.l1 ? 'L1' : 'L1+L2';
 
-  if (result.status === 'no-projects') { console.log(`aldc-verify ${level}: not-run, no hay ningún app.json en ${root}.`); return 3; }
-  if (result.status === 'not-run') { console.log(`aldc-verify ${level}: not-run, ${result.reason}.`); return 3; }
+  if (result.status === 'no-projects') { console.log(t('verifyNoProjects', level, root)); return 3; }
+  if (result.status === 'not-run') { console.log(t('verifyNotRun', level, result.reason)); return 3; }
 
   const c = result.compiler;
   const report = {
@@ -67,7 +70,7 @@ function main() {
   if (args.json) { console.log(JSON.stringify(report, null, 2)); return report.projects.some((p) => p.errors.length) ? 1 : 0; }
 
   const out = [];
-  out.push(`aldc-verify ${level}: BC ${result.bcMajor}, alc ${c.version}${c.pinned ? '' : ' (sin fijar en .claude/aldc-verify.json)'}`);
+  out.push(t('verifyHeader', level, result.bcMajor, c.version, c.pinned ? '' : t('unpinned')));
   const allErrors = [];
   const allWarnings = [];
   let l2Incomplete = false;
@@ -77,31 +80,31 @@ function main() {
     const analyzerWarn = p.warnings.filter((w) => !/^AL/i.test(w.code));
     const mark = p.errors.length ? '✘' : '✔';
     const l2 = p.analyzers
-      ? ` · ${analyzerWarn.length} de analizadores [${p.analyzers.names.join(', ')}; ${p.analyzers.source}${p.analyzers.ruleset ? `; ruleset ${rel(root, p.analyzers.ruleset)}` : ''}]`
+      ? t('analyzersPart', analyzerWarn.length, p.analyzers.names.join(', '), p.analyzers.source, p.analyzers.ruleset ? rel(root, p.analyzers.ruleset) : null)
       : '';
-    out.push(`${mark} ${p.name} (${p.project}): ${p.errors.length} errores · ${compilerWarn.length} warnings del compilador${l2} · ${p.seconds.toFixed(1)} s`);
+    out.push(t('projectLine', mark, p.name, p.project, p.errors.length, compilerWarn.length, l2, p.seconds.toFixed(1)));
     if (p.analyzers && p.analyzers.missing) {
-      out.push(`    ⚠ L2 incompleto: no encuentro ${p.analyzers.missing} de ${p.analyzers.requested.length} analizadores (${p.analyzers.requested.join(', ')}) junto a alc`);
+      out.push(t('l2Incomplete', p.analyzers.missing, p.analyzers.requested.length, p.analyzers.requested.join(', ')));
       l2Incomplete = true;
     }
-    if (p.symbolsFrom && p.symbolsFrom !== '.alpackages') out.push(`    símbolos tomados de: ${p.symbolsFrom}`);
+    if (p.symbolsFrom && p.symbolsFrom !== '.alpackages') out.push(t('symbolsFrom', p.symbolsFrom));
     if (p.warnings.length) out.push(`    ${countBy(p.warnings, 'code').slice(0, 10).map(([k, n]) => `${k}×${n}`).join(', ')}`);
-    if (p.exitCode !== 0 && !p.errors.length) out.push('    alc terminó con error sin diagnósticos (ver last-report.json)');
+    if (p.exitCode !== 0 && !p.errors.length) out.push(t('alcNoDiagShort'));
     allErrors.push(...p.errors);
     allWarnings.push(...p.warnings);
   }
   if (allErrors.length) {
-    out.push('', `Errores (${allErrors.length}):`);
+    out.push('', t('errorsHeader', allErrors.length));
     for (const e of allErrors.slice(0, MAX_ERRORS)) out.push(`  ${e.file}(${e.line},${e.col}): ${e.code}: ${e.message}`);
-    if (allErrors.length > MAX_ERRORS) out.push(`  … y ${allErrors.length - MAX_ERRORS} más`);
+    if (allErrors.length > MAX_ERRORS) out.push(`  ${t('andMore', allErrors.length - MAX_ERRORS)}`);
   }
   if (allWarnings.length) {
     const perProject = report.projects.filter((p) => p.warnings && p.warnings.length).map((p) => `${p.project} ${p.warnings.length}`).join(' · ');
-    out.push('', `Warnings (primeros ${Math.min(MAX_WARNINGS, allWarnings.length)} de ${allWarnings.length}: ${perProject}):`);
+    out.push('', t('warningsHeader', Math.min(MAX_WARNINGS, allWarnings.length), allWarnings.length, perProject));
     for (const w of allWarnings.slice(0, MAX_WARNINGS)) out.push(`  ${w.file}(${w.line},${w.col}): ${w.code}: ${w.message.length > 120 ? w.message.slice(0, 117) + '…' : w.message}`);
   }
-  if (l2Incomplete) out.push('', 'Estado: partial. L1 vale, pero L2 no se ha ejecutado completo: no digas que los analizadores pasan.');
-  out.push('', `Detalle completo: ${rel(root, path.join(dir, 'last-report.json'))}`);
+  if (l2Incomplete) out.push('', t('partialState'));
+  out.push('', t('fullDetail', rel(root, path.join(dir, 'last-report.json'))));
   console.log(out.join('\n'));
   return allErrors.length ? 1 : 0;
 }
@@ -109,6 +112,6 @@ function main() {
 try {
   process.exitCode = main();
 } catch (err) {
-  console.log(`aldc-verify: error interno, no he verificado nada (${err && err.message}).`);
+  console.log(t('verifyInternal', err && err.message));
   process.exitCode = 3;
 }
