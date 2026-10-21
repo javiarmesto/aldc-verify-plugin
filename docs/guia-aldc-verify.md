@@ -72,7 +72,7 @@ Hay dos lados: el plugin, instalado una vez en tu máquina, y la capa fina que `
 - `.claude/aldc-verify.json`: la versión de BC objetivo y el compilador fijado: `bcMajor`, `alExtension` (Windows), `alTool` (nube). Aquí también va `guard.protectedPaths`, o `"guard": false` para apagar el guard.
 - `.claude/settings.json`: activa el plugin; deniega `git add -A`, `add .`, `commit -a` y `push --force`.
 - `CLAUDE.md`: reglas, cómo compilar, warnings conocidos y sección *Aprendido*.
-- `.github/workflows/al-compile.yml`: CI en cada PR, solo si el repo versiona los símbolos. SalesMargin no los versiona, así que no la tiene.
+- `.github/workflows/al-compile.yml`: CI en cada PR, solo si el repo versiona los símbolos. Un repo que no los versiona no la tiene.
 
 *Local, ignorado por git*
 
@@ -105,13 +105,13 @@ El guard sustituye la supervisión humana en lo que no tiene vuelta atrás. Solo
 | `git push` a `main`, `master`, `dev`, `develop` | Trabaja en una rama `claude/…` y abre una PR. También si haces push sin destino estando en una de esas ramas. |
 | `git add -A`, `.`, `--all`, `*` | Añade los ficheros uno a uno por su ruta. |
 | `git commit -a` | Añade los ficheros uno a uno y haz commit sin `-a`. |
-| `git add` de una ruta protegida | Las carpetas de `guard.protectedPaths` quedan fuera de git. Sirve para datos de cliente. |
+| `git add` de una ruta protegida | Las carpetas de `guard.protectedPaths` quedan fuera de git. Sirve para datos que nunca deben entrar en git. |
 
 ```jsonc
 // .claude/aldc-verify.json
 {
   "bcMajor": 28,
-  "guard": { "protectedPaths": ["docs/datos-cliente"] }
+  "guard": { "protectedPaths": ["data/real-exports"] }
 }
 // "guard": false  →  apaga el guard en este repo
 ```
@@ -264,7 +264,7 @@ There are two sides: the plugin, installed once on your machine, and the thin la
 - `.claude/aldc-verify.json`: the target BC version and the pinned compiler: `bcMajor`, `alExtension` (Windows), `alTool` (cloud). It also holds `guard.protectedPaths`, or `"guard": false` to turn the guard off.
 - `.claude/settings.json`: enables the plugin; denies `git add -A`, `add .`, `commit -a` and `push --force`.
 - `CLAUDE.md`: rules, how to compile, known warnings and a *Learned* (*Aprendido*) section.
-- `.github/workflows/al-compile.yml`: CI on each PR, only if the repo versions its symbols. SalesMargin does not version them, so it has none.
+- `.github/workflows/al-compile.yml`: CI on each PR, only if the repo versions its symbols. A repo that does not version them has none.
 
 *Local, ignored by git*
 
@@ -297,13 +297,13 @@ The guard replaces human supervision for things that cannot be undone. It only a
 | `git push` to `main`, `master`, `dev`, `develop` | Work on a `claude/…` branch and open a PR. This also applies to a push with no target while on one of those branches. |
 | `git add -A`, `.`, `--all`, `*` | Add the files one by one by path. |
 | `git commit -a` | Add the files one by one and commit without `-a`. |
-| `git add` of a protected path | Folders in `guard.protectedPaths` stay out of git. Use it for customer data. |
+| `git add` of a protected path | Folders in `guard.protectedPaths` stay out of git. Use it for data that must never be committed. |
 
 ```jsonc
 // .claude/aldc-verify.json
 {
   "bcMajor": 28,
-  "guard": { "protectedPaths": ["docs/datos-cliente"] }
+  "guard": { "protectedPaths": ["data/real-exports"] }
 }
 // "guard": false  →  turns the guard off in this repo
 ```
