@@ -322,7 +322,7 @@ a { color: var(--accent); }
         <div class="node"><span class="path">.claude/aldc-verify.json</span><p lang="es">La versión de BC objetivo y el compilador fijado: <code>bcMajor</code>, <code>alExtension</code> (Windows), <code>alTool</code> (nube). Aquí también va <code>guard.protectedPaths</code>, o <code>"guard": false</code> para apagar el guard.</p><p lang="en">The target BC version and the pinned compiler: <code>bcMajor</code>, <code>alExtension</code> (Windows), <code>alTool</code> (cloud). It also holds <code>guard.protectedPaths</code>, or <code>"guard": false</code> to turn the guard off.</p></div>
         <div class="node"><span class="path">.claude/settings.json</span><p lang="es">Activa el plugin; deniega <code>git add -A</code>, <code>add .</code>, <code>commit -a</code> y <code>push --force</code>.</p><p lang="en">Enables the plugin; denies <code>git add -A</code>, <code>add .</code>, <code>commit -a</code> and <code>push --force</code>.</p></div>
         <div class="node"><span class="path">CLAUDE.md</span><p lang="es">Reglas, cómo compilar, warnings conocidos y sección <em>Aprendido</em>.</p><p lang="en">Rules, how to compile, known warnings and a <em>Learned</em> (<em>Aprendido</em>) section.</p></div>
-        <div class="node"><span class="path">.github/workflows/al-compile.yml</span><p lang="es">CI en cada PR, solo si el repo versiona los símbolos. SalesMargin no los versiona, así que no la tiene.</p><p lang="en">CI on each PR, only if the repo versions its symbols. SalesMargin does not version them, so it has none.</p></div>
+        <div class="node"><span class="path">.github/workflows/al-compile.yml</span><p lang="es">CI en cada PR, solo si el repo versiona los símbolos. Un repo que no los versiona no la tiene.</p><p lang="en">CI on each PR, only if the repo versions its symbols. A repo that does not version them has none.</p></div>
       </div>
       <div class="group">
         <div class="group-label"><span lang="es">Local, ignorado por git</span><span lang="en">Local, ignored by git</span></div>
@@ -369,14 +369,14 @@ a { color: var(--accent); }
         <tr><td><code>git push</code> <span lang="es">a</span><span lang="en">to</span> <code>main</code>, <code>master</code>, <code>dev</code>, <code>develop</code></td><td><span lang="es">Trabaja en una rama <code>claude/…</code> y abre una PR. También si haces push sin destino estando en una de esas ramas.</span><span lang="en">Work on a <code>claude/…</code> branch and open a PR. This also applies to a push with no target while on one of those branches.</span></td></tr>
         <tr><td><code>git add -A</code>, <code>.</code>, <code>--all</code>, <code>*</code></td><td><span lang="es">Añade los ficheros uno a uno por su ruta.</span><span lang="en">Add the files one by one by path.</span></td></tr>
         <tr><td><code>git commit -a</code></td><td><span lang="es">Añade los ficheros uno a uno y haz commit sin <code>-a</code>.</span><span lang="en">Add the files one by one and commit without <code>-a</code>.</span></td></tr>
-        <tr><td><code>git add</code> <span lang="es">de una ruta protegida</span><span lang="en">of a protected path</span></td><td><span lang="es">Las carpetas de <code>guard.protectedPaths</code> quedan fuera de git. Sirve para datos de cliente.</span><span lang="en">Folders in <code>guard.protectedPaths</code> stay out of git. Use it for customer data.</span></td></tr>
+        <tr><td><code>git add</code> <span lang="es">de una ruta protegida</span><span lang="en">of a protected path</span></td><td><span lang="es">Las carpetas de <code>guard.protectedPaths</code> quedan fuera de git. Sirve para datos que nunca deben entrar en git.</span><span lang="en">Folders in <code>guard.protectedPaths</code> stay out of git. Use it for data that must never be committed.</span></td></tr>
       </tbody>
     </table>
   </div>
   <pre>// .claude/aldc-verify.json
 {
   "bcMajor": 28,
-  "guard": { "protectedPaths": ["docs/datos-cliente"] }
+  "guard": { "protectedPaths": ["data/real-exports"] }
 }
 // "guard": false  →  <span lang="es">apaga el guard en este repo</span><span lang="en">turns the guard off in this repo</span></pre>
 </section>
