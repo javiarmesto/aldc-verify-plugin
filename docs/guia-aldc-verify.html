@@ -1,0 +1,549 @@
+<title>Guía aldc-verify</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; two drawn views (arquitectura, anatomía) break wider; first steps are a checklist. */
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --fg: #16202b;
+  --muted: #566372;
+  --line: #d5dbe3;
+  --accent: #1d5fd1;      /* compiler blue: the gate */
+  --accent-soft: #e4ecfb;
+  --ok: #1d7a46;
+  --ok-soft: #e2f3e9;
+  --err: #b42318;
+  --err-soft: #fbe8e6;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --code-bg: #eef1f5;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #16202b; --fg: #e6ebf1; --muted: #9aa8b8; --line: #2a3644;
+    --accent: #7aa7ff; --accent-soft: #1b2b46; --ok: #5fcf8f; --ok-soft: #14301f;
+    --err: #ff8a7d; --err-soft: #3a1a17; --warn: #f0b860; --warn-soft: #33260f; --code-bg: #1d2834;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #16202b; --fg: #e6ebf1; --muted: #9aa8b8; --line: #2a3644;
+  --accent: #7aa7ff; --accent-soft: #1b2b46; --ok: #5fcf8f; --ok-soft: #14301f;
+  --err: #ff8a7d; --err-soft: #3a1a17; --warn: #f0b860; --warn-soft: #33260f; --code-bg: #1d2834;
+  color-scheme: dark;
+}
+.app[data-lang="es"] [lang="en"], .app[data-lang="en"] [lang="es"] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 16px; line-height: 1.6; margin: 0; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.15; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 26px; font-weight: 700; }
+h3 { font-size: 17px; font-weight: 700; }
+p { margin: 0; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 19px; color: var(--muted); max-width: 60ch; }
+code, .mono { font-family: var(--mono); font-size: 0.88em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+section { display: flex; flex-direction: column; gap: 18px; }
+header { display: flex; flex-direction: column; gap: 14px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.langs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); }
+.langs button { font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; border: 0; border-radius: 999px; padding: 4px 12px; background: transparent; color: var(--muted); cursor: pointer; }
+.langs button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--muted); background: var(--surface); }
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; min-width: 760px; height: auto; color: var(--fg); }
+figcaption { font-size: 14px; color: var(--muted); max-width: 72ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+.legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Anatomy */
+.anat { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+@media (max-width: 760px) { .anat { grid-template-columns: 1fr; } }
+.tree { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.tree h3 { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tree h3 small { font-family: var(--mono); font-weight: 400; font-size: 12px; color: var(--muted); }
+.node { display: grid; grid-template-columns: minmax(0, 15ch) minmax(0, 1fr); gap: 4px 14px; align-items: baseline; font-size: 14px; }
+.node .path { font-family: var(--mono); font-size: 13px; color: var(--accent); word-break: break-word; }
+.node .path.dim { color: var(--muted); }
+.node p { color: var(--fg); }
+.group { display: flex; flex-direction: column; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.group:first-of-type { border-top: 0; padding-top: 0; }
+.group-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.tag { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 4px; }
+@media (max-width: 480px) { .node { grid-template-columns: 1fr; } }
+
+/* Tables */
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; }
+.pill { font-family: var(--mono); font-size: 12px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.err { background: var(--err-soft); color: var(--err); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.info { background: var(--accent-soft); color: var(--accent); }
+.msg { font-family: var(--mono); font-size: 13px; }
+
+/* Checklist */
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 4px 12px; }
+.step input { width: 20px; height: 20px; margin: 3px 0 0; accent-color: var(--accent); }
+.step label { font-weight: 600; cursor: pointer; }
+.step .detail { grid-column: 2; font-size: 14px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; }
+.step .detail .expect { color: var(--fg); }
+.step.done label { text-decoration: line-through; color: var(--muted); }
+pre { margin: 0; background: var(--code-bg); border-radius: 6px; padding: 8px 10px; overflow-x: auto; font-family: var(--mono); font-size: 13px; color: var(--fg); }
+.progress { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.note { background: var(--warn-soft); color: var(--fg); border-radius: 10px; padding: 14px 16px; font-size: 14px; }
+.note strong { color: var(--warn); }
+.cmdbox { display: flex; flex-direction: column; gap: 8px; }
+footer { font-family: var(--mono); font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+
+<div class="app" id="app" data-lang="es">
+<div class="wrap">
+
+<header>
+  <div class="topbar">
+    <div class="eyebrow"><span lang="es">Plugin de Claude Code · v0.3.0</span><span lang="en">Claude Code plugin · v0.3.0</span></div>
+    <div class="langs" role="group" aria-label="Idioma / Language"><button data-lang-set="es" aria-pressed="true">ES</button><button data-lang-set="en" aria-pressed="false">EN</button></div>
+  </div>
+  <h1><span lang="es">aldc-verify: Claude no termina con el AL roto</span><span lang="en">aldc-verify: Claude does not finish with broken AL</span></h1>
+  <p class="lede" lang="es">El plugin compila tus proyectos AL con el compilador real, pasa los analizadores y no deja a Claude cerrar un turno con errores que él mismo ha introducido. Desde la 0.3.0, los agentes también entregan solos: hacen commit, push y abren una PR en borrador, con un guard que les impide mergear o tocar la rama principal.</p>
+  <p class="lede" lang="en">The plugin compiles your AL projects with the real compiler, runs the analyzers and does not let Claude end a turn with errors it introduced itself. Since 0.3.0, agents also deliver on their own: they commit, push and open a draft PR, with a guard that stops them from merging or touching the main branch.</p>
+  <div class="meta">
+    <span class="chip"><span lang="es">L1 compilar · L2 analizadores</span><span lang="en">L1 compile · L2 analyzers</span></span>
+    <span class="chip"><span lang="es">guard · overlay ALDC</span><span lang="en">guard · ALDC overlay</span></span>
+    <span class="chip"><span lang="es">probado en BC 27 y BC 28</span><span lang="en">tested on BC 27 and BC 28</span></span>
+    <span class="chip"><span lang="es">Windows · nube · GitHub Actions</span><span lang="en">Windows · cloud · GitHub Actions</span></span>
+  </div>
+</header>
+
+<section id="arquitectura">
+  <div class="eyebrow"><span lang="es">Arquitectura</span><span lang="en">Architecture</span></div>
+  <h2><span lang="es">Qué pasa en un turno</span><span lang="en">What happens in a turn</span></h2>
+  <p class="prose" lang="es">Hay seis puntos de hook y un solo compilador. La clave es la <strong>huella</strong>: un hash del contenido de los <code>.al</code>, los <code>app.json</code> y la lista de símbolos. Se toma al empezar el turno y se compara al terminar. Si Claude no ha tocado AL, no se compila nada. Mientras Claude trabaja, el guard revisa cada comando de <code>git</code> y <code>gh</code>, y el overlay explica a cada subagente de ALDC cómo verificar.</p>
+  <p class="prose" lang="en">There are six hook points and a single compiler. The key is the <strong>fingerprint</strong>: a hash of the content of the <code>.al</code> files, the <code>app.json</code> files and the symbol list. It is taken when the turn starts and compared when it ends. If Claude did not touch AL, nothing is compiled. While Claude works, the guard checks every <code>git</code> and <code>gh</code> command, and the overlay tells each ALDC subagent how to verify.</p>
+  <figure>
+    <div class="diagram">
+      <svg id="arch-svg" viewBox="0 0 1000 480" role="img"
+        data-label-es="Flujo de un turno: SessionStart prepara el compilador, UserPromptSubmit guarda la huella, SubagentStart da instrucciones a los subagentes aldc, Claude edita, PreToolUse guard deniega comandos git peligrosos, y al parar el gate compara la huella; si cambió compila con lock; con errores devuelve a Claude hasta 3 veces; en verde termina."
+        data-label-en="Turn flow: SessionStart prepares the compiler, UserPromptSubmit stores the fingerprint, SubagentStart gives aldc subagents instructions, Claude edits, the PreToolUse guard denies dangerous git commands, and on stop the gate compares the fingerprint; if it changed it compiles with a lock; with errors it sends Claude back up to 3 times; when green it finishes."
+        aria-label="Flujo de un turno">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+          <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--accent)"/></marker>
+          <marker id="ahr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--err)"/></marker>
+          <marker id="ahg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:var(--ok)"/></marker>
+        </defs>
+        <g font-family="IBM Plex Sans, Segoe UI, sans-serif" font-size="13" fill="currentColor">
+          <!-- shapes and arrows (shared by both languages) -->
+          <line x1="20" y1="240" x2="980" y2="240" stroke-dasharray="4 4" style="stroke:var(--line)"/>
+
+          <rect x="20" y="44" width="160" height="74" rx="8" stroke="currentColor" style="fill:var(--surface)"/>
+          <rect x="220" y="44" width="160" height="74" rx="8" stroke="currentColor" style="fill:var(--surface)"/>
+          <line x1="180" y1="81" x2="216" y2="81" stroke="currentColor" marker-end="url(#ah)"/>
+
+          <rect x="20" y="266" width="160" height="74" rx="8" stroke="currentColor" style="fill:var(--surface)"/>
+          <line x1="180" y1="303" x2="216" y2="303" stroke="currentColor" marker-end="url(#ah)"/>
+
+          <rect x="220" y="266" width="160" height="74" rx="8" stroke="currentColor" style="fill:var(--surface)"/>
+          <line x1="300" y1="118" x2="300" y2="262" stroke="currentColor" marker-end="url(#ah)"/>
+
+          <rect x="220" y="384" width="160" height="74" rx="8" stroke="currentColor" style="fill:var(--surface)"/>
+          <line x1="300" y1="340" x2="300" y2="380" stroke="currentColor" marker-end="url(#ah)"/>
+
+          <rect x="440" y="44" width="170" height="74" rx="8" stroke-width="1.5" style="fill:var(--accent-soft);stroke:var(--accent)"/>
+          <path d="M380,288 L410,288 L410,81 L436,81" fill="none" stroke="currentColor" marker-end="url(#ah)"/>
+
+          <rect x="660" y="44" width="150" height="74" rx="8" stroke="currentColor" style="fill:var(--surface)"/>
+          <line x1="610" y1="81" x2="656" y2="81" stroke-width="1.5" marker-end="url(#ahb)" style="stroke:var(--accent)"/>
+
+          <rect x="850" y="44" width="130" height="74" rx="8" style="fill:var(--ok-soft);stroke:var(--ok)"/>
+          <line x1="810" y1="70" x2="846" y2="70" stroke-width="1.5" marker-end="url(#ahg)" style="stroke:var(--ok)"/>
+
+          <rect x="660" y="160" width="150" height="56" rx="8" style="fill:var(--err-soft);stroke:var(--err)"/>
+          <line x1="735" y1="118" x2="735" y2="156" stroke-width="1.5" marker-end="url(#ahr)" style="stroke:var(--err)"/>
+          <path d="M735,216 L735,320 L384,320" fill="none" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ahr)" style="stroke:var(--err)"/>
+
+          <rect x="850" y="160" width="130" height="56" rx="8" style="fill:var(--warn-soft);stroke:var(--warn)"/>
+          <line x1="810" y1="188" x2="846" y2="188" stroke-width="1.5" marker-end="url(#ah)" style="stroke:var(--warn)"/>
+
+          <rect x="440" y="384" width="540" height="74" rx="8" fill="none" style="stroke:var(--line)"/>
+
+          <!-- node titles that are the same in both languages -->
+          <text x="100" y="68" text-anchor="middle" font-weight="600">SessionStart</text>
+          <text x="300" y="68" text-anchor="middle" font-weight="600">UserPromptSubmit</text>
+          <text x="100" y="290" text-anchor="middle" font-weight="600">SubagentStart</text>
+          <text x="300" y="408" text-anchor="middle" font-weight="600">PreToolUse · guard</text>
+          <text x="525" y="68" text-anchor="middle" font-weight="700" style="fill:var(--accent)">Stop / SubagentStop</text>
+          <text x="545" y="408" font-family="IBM Plex Mono, monospace" font-size="12">/al-verify · al-build-validator · /al-go · /al-learn · /init</text>
+          <text x="633" y="72" text-anchor="middle" font-size="12" style="fill:var(--accent)" lang="es">sí</text>
+          <text x="633" y="72" text-anchor="middle" font-size="12" style="fill:var(--accent)" lang="en">yes</text>
+          <text x="828" y="62" text-anchor="middle" font-size="12" style="fill:var(--ok)" lang="es">0 err</text>
+          <text x="828" y="62" text-anchor="middle" font-size="12" style="fill:var(--ok)" lang="en">0 err</text>
+
+          <g lang="es">
+            <text x="20" y="28" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" style="fill:var(--muted)">HOOKS DEL PLUGIN · INICIO Y FIN</text>
+            <text x="20" y="258" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" style="fill:var(--muted)">CLAUDE Y SUS SUBAGENTES · DURANTE EL TURNO</text>
+            <text x="100" y="88" text-anchor="middle" font-size="12" style="fill:var(--muted)">detecta alc (Windows)</text>
+            <text x="100" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">instala al (nube)</text>
+            <text x="300" y="88" text-anchor="middle" font-size="12" style="fill:var(--muted)">guarda la huella</text>
+            <text x="300" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">al empezar el turno</text>
+            <text x="100" y="310" text-anchor="middle" font-size="12" style="fill:var(--muted)">overlay a cada aldc:*</text>
+            <text x="100" y="327" text-anchor="middle" font-size="12" style="fill:var(--muted)">cómo verificar</text>
+            <text x="300" y="296" text-anchor="middle" font-weight="600">Claude edita AL</text>
+            <text x="300" y="315" text-anchor="middle" font-size="12" style="fill:var(--muted)">o un subagente</text>
+            <text x="308" y="200" font-size="12" style="fill:var(--muted)">tu mensaje</text>
+            <text x="308" y="366" font-size="12" style="fill:var(--muted)">git / gh</text>
+            <text x="300" y="428" text-anchor="middle" font-size="12" style="fill:var(--muted)">Bash y PowerShell</text>
+            <text x="300" y="445" text-anchor="middle" font-size="12" style="fill:var(--err)">bloquea merge y push -f</text>
+            <text x="525" y="88" text-anchor="middle" font-size="12">¿cambió la huella?</text>
+            <text x="525" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">no → sale en 0,2 s</text>
+            <text x="416" y="200" font-size="12" style="fill:var(--muted)">quiere</text>
+            <text x="416" y="215" font-size="12" style="fill:var(--muted)">terminar</text>
+            <text x="735" y="68" text-anchor="middle" font-weight="600">Compila</text>
+            <text x="735" y="88" text-anchor="middle" font-size="12" style="fill:var(--muted)">App → Test, con lock</text>
+            <text x="735" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">símbolos de BC fijado</text>
+            <text x="915" y="68" text-anchor="middle" font-weight="700" style="fill:var(--ok)">Verde</text>
+            <text x="915" y="88" text-anchor="middle" font-size="12">termina</text>
+            <text x="915" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">o avisa 1 vez</text>
+            <text x="735" y="184" text-anchor="middle" font-weight="700" style="fill:var(--err)">Rojo · exit 2</text>
+            <text x="735" y="202" text-anchor="middle" font-size="12">errores por stderr</text>
+            <text x="560" y="312" text-anchor="middle" font-size="12" style="fill:var(--err)">vuelve a Claude a corregir (máx. 3)</text>
+            <text x="915" y="184" text-anchor="middle" font-weight="700" style="fill:var(--warn)">Deja parar</text>
+            <text x="915" y="202" text-anchor="middle" font-size="12">con resumen</text>
+            <text x="828" y="152" text-anchor="middle" font-size="11" style="fill:var(--warn)">4.º intento</text>
+            <text x="828" y="230" text-anchor="middle" font-size="11" style="fill:var(--warn)">o sin cambios</text>
+            <text x="460" y="408" font-weight="600">A demanda:</text>
+            <text x="460" y="428" font-size="12" style="fill:var(--muted)">mismo compilador y lock; un verde de /al-verify evita que el gate recompile</text>
+            <text x="460" y="445" font-size="12" style="fill:var(--muted)">/al-go lo lanza Claude: rama claude/, push y PR en borrador; nunca mergea</text>
+          </g>
+          <g lang="en">
+            <text x="20" y="28" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" style="fill:var(--muted)">PLUGIN HOOKS · START AND END</text>
+            <text x="20" y="258" font-family="IBM Plex Mono, monospace" font-size="11" letter-spacing="1" style="fill:var(--muted)">CLAUDE AND ITS SUBAGENTS · DURING THE TURN</text>
+            <text x="100" y="88" text-anchor="middle" font-size="12" style="fill:var(--muted)">finds alc (Windows)</text>
+            <text x="100" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">installs al (cloud)</text>
+            <text x="300" y="88" text-anchor="middle" font-size="12" style="fill:var(--muted)">stores the fingerprint</text>
+            <text x="300" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">when the turn starts</text>
+            <text x="100" y="310" text-anchor="middle" font-size="12" style="fill:var(--muted)">overlay for each aldc:*</text>
+            <text x="100" y="327" text-anchor="middle" font-size="12" style="fill:var(--muted)">how to verify</text>
+            <text x="300" y="296" text-anchor="middle" font-weight="600">Claude edits AL</text>
+            <text x="300" y="315" text-anchor="middle" font-size="12" style="fill:var(--muted)">or a subagent</text>
+            <text x="308" y="200" font-size="12" style="fill:var(--muted)">your message</text>
+            <text x="308" y="366" font-size="12" style="fill:var(--muted)">git / gh</text>
+            <text x="300" y="428" text-anchor="middle" font-size="12" style="fill:var(--muted)">Bash and PowerShell</text>
+            <text x="300" y="445" text-anchor="middle" font-size="12" style="fill:var(--err)">denies merge, push -f</text>
+            <text x="525" y="88" text-anchor="middle" font-size="12">fingerprint changed?</text>
+            <text x="525" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">no → exits in 0.2 s</text>
+            <text x="416" y="200" font-size="12" style="fill:var(--muted)">wants</text>
+            <text x="416" y="215" font-size="12" style="fill:var(--muted)">to stop</text>
+            <text x="735" y="68" text-anchor="middle" font-weight="600">Compile</text>
+            <text x="735" y="88" text-anchor="middle" font-size="12" style="fill:var(--muted)">App → Test, with lock</text>
+            <text x="735" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">pinned BC symbols</text>
+            <text x="915" y="68" text-anchor="middle" font-weight="700" style="fill:var(--ok)">Green</text>
+            <text x="915" y="88" text-anchor="middle" font-size="12">finishes</text>
+            <text x="915" y="105" text-anchor="middle" font-size="12" style="fill:var(--muted)">or notes it once</text>
+            <text x="735" y="184" text-anchor="middle" font-weight="700" style="fill:var(--err)">Red · exit 2</text>
+            <text x="735" y="202" text-anchor="middle" font-size="12">errors on stderr</text>
+            <text x="560" y="312" text-anchor="middle" font-size="12" style="fill:var(--err)">back to Claude to fix (max. 3)</text>
+            <text x="915" y="184" text-anchor="middle" font-weight="700" style="fill:var(--warn)">Lets it stop</text>
+            <text x="915" y="202" text-anchor="middle" font-size="12">with a summary</text>
+            <text x="828" y="152" text-anchor="middle" font-size="11" style="fill:var(--warn)">4th attempt</text>
+            <text x="828" y="230" text-anchor="middle" font-size="11" style="fill:var(--warn)">or no changes</text>
+            <text x="460" y="408" font-weight="600">On demand:</text>
+            <text x="460" y="428" font-size="12" style="fill:var(--muted)">same compiler and lock; a green /al-verify spares the gate a recompile</text>
+            <text x="460" y="445" font-size="12" style="fill:var(--muted)">Claude can run /al-go: claude/ branch, push, draft PR; never merges</text>
+          </g>
+        </g>
+      </svg>
+    </div>
+    <figcaption lang="es">El gate solo compila si la huella cambió en el turno. Con errores devuelve a Claude a corregir, como mucho 3 veces. Si tras un bloqueo Claude no cambia nada, deja parar enseguida. Si se arregla después de bloquear, le dice a Claude una vez que ya está en verde, para que su respuesta final lo cite. SubagentStop hace lo mismo para los subagentes que escriben código (implement, developer, builder), cada uno con su contador. SubagentStart solo actúa en subagentes <code>aldc:*</code>, y el guard solo en repos AL.</figcaption>
+    <figcaption lang="en">The gate only compiles if the fingerprint changed during the turn. With errors it sends Claude back to fix them, at most 3 times. If Claude changes nothing after a block, it lets it stop at once. If the build is fixed after a block, it tells Claude once that it is green, so its final answer can cite it. SubagentStop does the same for subagents that write code (implement, developer, builder), each with its own counter. SubagentStart only acts on <code>aldc:*</code> subagents, and the guard only in AL repos.</figcaption>
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw" style="background: var(--accent)"></i><span lang="es">decisión del gate</span><span lang="en">gate decision</span></span>
+      <span><i class="sw" style="background: var(--err)"></i><span lang="es">bloquea o deniega</span><span lang="en">blocks or denies</span></span>
+      <span><i class="sw" style="background: var(--warn)"></i><span lang="es">suelta sin verde</span><span lang="en">releases without green</span></span>
+      <span><i class="sw" style="background: var(--ok)"></i><span lang="es">verde</span><span lang="en">green</span></span>
+    </div>
+  </figure>
+</section>
+
+<section id="anatomia">
+  <div class="eyebrow"><span lang="es">Anatomía</span><span lang="en">Anatomy</span></div>
+  <h2><span lang="es">Qué pieza hace qué, y dónde vive</span><span lang="en">Which part does what, and where it lives</span></h2>
+  <p class="prose" lang="es">Hay dos lados: el plugin, instalado una vez en tu máquina, y la capa fina que <code>/aldc-verify:init</code> deja en cada repo. El plugin no guarda nada en el repo salvo su carpeta de estado, que se ignora a sí misma.</p>
+  <p class="prose" lang="en">There are two sides: the plugin, installed once on your machine, and the thin layer that <code>/aldc-verify:init</code> leaves in each repo. The plugin stores nothing in the repo except its state folder, which ignores itself.</p>
+  <div class="anat">
+    <div class="tree">
+      <h3><span lang="es">El plugin</span><span lang="en">The plugin</span> <small>javiarmesto/aldc-verify-plugin</small></h3>
+      <div class="group">
+        <div class="group-label"><span lang="es">Automático (hooks)</span><span lang="en">Automatic (hooks)</span></div>
+        <div class="node"><span class="path">hooks/hooks.json</span><p lang="es">Registra seis puntos: SessionStart, UserPromptSubmit, PreToolUse, SubagentStart, SubagentStop y Stop.</p><p lang="en">Registers six points: SessionStart, UserPromptSubmit, PreToolUse, SubagentStart, SubagentStop and Stop.</p></div>
+        <div class="node"><span class="path">ensure-al-toolchain.js</span><p lang="es"><span class="tag">SessionStart</span> Busca <code>alc</code> o instala dotnet8 + <code>al</code> en la versión fijada. Le recuerda a Claude el flujo con ALDC.</p><p lang="en"><span class="tag">SessionStart</span> Finds <code>alc</code> or installs dotnet8 + <code>al</code> at the pinned version. Reminds Claude of the ALDC flow.</p></div>
+        <div class="node"><span class="path">al-verify-baseline.js</span><p lang="es"><span class="tag">UserPromptSubmit</span> Huella del árbol al empezar cada turno. No imprime nada.</p><p lang="en"><span class="tag">UserPromptSubmit</span> Tree fingerprint at the start of each turn. Prints nothing.</p></div>
+        <div class="node"><span class="path">guard.js</span><p lang="es"><span class="tag">PreToolUse</span> Para Bash y PowerShell. En repos AL deniega merge, push forzado o a la rama principal, <code>git add</code> masivo, <code>commit -a</code> y rutas protegidas.</p><p lang="en"><span class="tag">PreToolUse</span> For Bash and PowerShell. In AL repos it denies merges, forced pushes or pushes to the main branch, mass <code>git add</code>, <code>commit -a</code> and protected paths.</p></div>
+        <div class="node"><span class="path">aldc-overlay.js</span><p lang="es"><span class="tag">SubagentStart</span> A cada subagente <code>aldc:*</code> le añade cómo verificar con aldc-verify, según su rol. No toca el plugin <code>aldc</code>.</p><p lang="en"><span class="tag">SubagentStart</span> Adds to each <code>aldc:*</code> subagent how to verify with aldc-verify, by role. It does not touch the <code>aldc</code> plugin.</p></div>
+        <div class="node"><span class="path">al-verify-gate.js</span><p lang="es"><span class="tag">Stop · SubagentStop</span> El gate: compara, compila, bloquea o suelta. Lleva el historial en <code>state.json</code>.</p><p lang="en"><span class="tag">Stop · SubagentStop</span> The gate: compares, compiles, blocks or releases. Keeps the history in <code>state.json</code>.</p></div>
+      </div>
+      <div class="group">
+        <div class="group-label"><span lang="es">A demanda</span><span lang="en">On demand</span></div>
+        <div class="node"><span class="path">skills/al-verify</span><p lang="es">L1+L2 con resumen corto. Si lo lanzas tú, solo informa.</p><p lang="en">L1+L2 with a short summary. If you run it, it only reports.</p></div>
+        <div class="node"><span class="path">agents/al-build-validator</span><p lang="es">Compila y agrupa los errores por causa. Solo lectura.</p><p lang="en">Compiles and groups the errors by cause. Read-only.</p></div>
+        <div class="node"><span class="path">skills/al-go</span><p lang="es">Verifica, revisa, sube versión si el repo lo pide, hace el commit fichero a fichero, el push y la PR en borrador. Lo lanza Claude o tú; no espera a nadie y nunca mergea.</p><p lang="en">Verifies, reviews, bumps the version if the repo asks for it, commits file by file, pushes and opens a draft PR. Claude or you can run it; it does not wait for anyone and never merges.</p></div>
+        <div class="node"><span class="path">skills/al-learn</span><p lang="es">Propone una línea para el <code>CLAUDE.md</code>; la escribe solo si dices que sí.</p><p lang="en">Proposes one line for <code>CLAUDE.md</code>; writes it only if you say yes.</p></div>
+        <div class="node"><span class="path">skills/init</span><p lang="es">Aplica la capa al repo sin pisar nada (dry-run primero).</p><p lang="en">Applies the layer to the repo without overwriting anything (dry run first).</p></div>
+      </div>
+      <div class="group">
+        <div class="group-label"><span lang="es">Motor común</span><span lang="en">Shared engine</span></div>
+        <div class="node"><span class="path">scripts/lib/al-env.js</span><p lang="es">Proyectos, orden App → Test, compilador, caché de símbolos filtrada, lock.</p><p lang="en">Projects, App → Test order, compiler, filtered symbol cache, lock.</p></div>
+        <div class="node"><span class="path">templates/</span><p lang="es"><code>CLAUDE.md</code>, <code>settings.json</code> y la CI <code>al-compile.yml</code>.</p><p lang="en"><code>CLAUDE.md</code>, <code>settings.json</code> and the <code>al-compile.yml</code> CI.</p></div>
+      </div>
+    </div>
+    <div class="tree">
+      <h3><span lang="es">En cada repo</span><span lang="en">In each repo</span> <small><span lang="es">lo que deja init</span><span lang="en">what init leaves</span></small></h3>
+      <div class="group">
+        <div class="group-label"><span lang="es">Versionado</span><span lang="en">Versioned</span></div>
+        <div class="node"><span class="path">.claude/aldc-verify.json</span><p lang="es">La versión de BC objetivo y el compilador fijado: <code>bcMajor</code>, <code>alExtension</code> (Windows), <code>alTool</code> (nube). Aquí también va <code>guard.protectedPaths</code>, o <code>"guard": false</code> para apagar el guard.</p><p lang="en">The target BC version and the pinned compiler: <code>bcMajor</code>, <code>alExtension</code> (Windows), <code>alTool</code> (cloud). It also holds <code>guard.protectedPaths</code>, or <code>"guard": false</code> to turn the guard off.</p></div>
+        <div class="node"><span class="path">.claude/settings.json</span><p lang="es">Activa el plugin; deniega <code>git add -A</code>, <code>add .</code>, <code>commit -a</code> y <code>push --force</code>.</p><p lang="en">Enables the plugin; denies <code>git add -A</code>, <code>add .</code>, <code>commit -a</code> and <code>push --force</code>.</p></div>
+        <div class="node"><span class="path">CLAUDE.md</span><p lang="es">Reglas, cómo compilar, warnings conocidos y sección <em>Aprendido</em>.</p><p lang="en">Rules, how to compile, known warnings and a <em>Learned</em> (<em>Aprendido</em>) section.</p></div>
+        <div class="node"><span class="path">.github/workflows/al-compile.yml</span><p lang="es">CI en cada PR, solo si el repo versiona los símbolos. Un repo que no los versiona no la tiene.</p><p lang="en">CI on each PR, only if the repo versions its symbols. A repo that does not version them has none.</p></div>
+      </div>
+      <div class="group">
+        <div class="group-label"><span lang="es">Local, ignorado por git</span><span lang="en">Local, ignored by git</span></div>
+        <div class="node"><span class="path dim">.claude/.aldc-verify/state.json</span><p lang="es">Último verde, intentos por sesión y subagente, y los últimos 20 eventos (<code>blocked</code>, <code>released</code>, <code>green</code>).</p><p lang="en">Last green, attempts per session and subagent, and the last 20 events (<code>blocked</code>, <code>released</code>, <code>green</code>).</p></div>
+        <div class="node"><span class="path dim">last-report.json</span><p lang="es">Todos los diagnósticos del último <code>/al-verify</code>. Los revisores de ALDC lo citan.</p><p lang="en">All diagnostics from the last <code>/al-verify</code>. ALDC reviewers cite it.</p></div>
+        <div class="node"><span class="path dim">compile.lock · run/</span><p lang="es">Una compilación a la vez por repo; cada ejecución usa su propia caché.</p><p lang="en">One compilation at a time per repo; each run uses its own cache.</p></div>
+      </div>
+      <div class="group">
+        <div class="group-label"><span lang="es">De dónde salen los símbolos</span><span lang="en">Where symbols come from</span></div>
+        <div class="node"><span class="path">.alpackages</span><p lang="es">Primero el del proyecto; si no hay, <code>al.packageCachePath</code> de VS Code y, si no, el del checkout principal (para worktrees). Microsoft: solo la versión mayor de BC fijada.</p><p lang="en">First the project's own; if there is none, VS Code's <code>al.packageCachePath</code>, and otherwise the main checkout's (for worktrees). Microsoft: only the pinned BC major version.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="comandos">
+  <div class="eyebrow"><span lang="es">Uso diario</span><span lang="en">Daily use</span></div>
+  <h2><span lang="es">Qué puedes pedir</span><span lang="en">What you can ask for</span></h2>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th><span lang="es">Comando</span><span lang="en">Command</span></th><th><span lang="es">Quién lo lanza</span><span lang="en">Who runs it</span></th><th><span lang="es">Qué hace</span><span lang="en">What it does</span></th><th><span lang="es">Efectos</span><span lang="en">Effects</span></th></tr></thead>
+      <tbody>
+        <tr><td><code>/aldc-verify:al-verify</code></td><td><span lang="es">Tú o Claude</span><span lang="en">You or Claude</span></td><td><span lang="es">Compila y pasa CodeCop, UICop y PerTenantExtensionCop. <code>--l1</code> solo compila; <code>--project test</code> limita a un proyecto.</span><span lang="en">Compiles and runs CodeCop, UICop and PerTenantExtensionCop. <code>--l1</code> only compiles; <code>--project test</code> limits it to one project.</span></td><td><span class="pill info"><span lang="es">ninguno</span><span lang="en">none</span></span></td></tr>
+        <tr><td><code>al-build-validator</code></td><td><span lang="es">Claude o ALDC</span><span lang="en">Claude or ALDC</span></td><td><span lang="es">Subagente que compila y devuelve los errores agrupados por causa, con el arreglo propuesto.</span><span lang="en">Subagent that compiles and returns the errors grouped by cause, with a proposed fix.</span></td><td><span class="pill info"><span lang="es">ninguno</span><span lang="en">none</span></span></td></tr>
+        <tr><td><code>/aldc-verify:al-go</code></td><td><span lang="es">Claude, ALDC o tú</span><span lang="en">Claude, ALDC or you</span></td><td><span lang="es">Verifica, revisa con BCQuality si está instalado, sube la versión si el repo lo pide, hace el commit fichero a fichero, el push a una rama <code>claude/…</code> y abre la PR en borrador. No para a preguntar. Nunca mergea ni marca la PR como lista.</span><span lang="en">Verifies, reviews with BCQuality if installed, bumps the version if the repo asks for it, commits file by file, pushes a <code>claude/…</code> branch and opens a draft PR. It does not stop to ask. It never merges or marks the PR ready.</span></td><td><span class="pill warn">commit · push · PR</span></td></tr>
+        <tr><td><code>/aldc-verify:al-learn</code></td><td><span lang="es">Tú o Claude</span><span lang="en">You or Claude</span></td><td><span lang="es">Tras una corrección, propone una regla de una línea para el <code>CLAUDE.md</code> del repo.</span><span lang="en">After a correction, proposes a one-line rule for the repo's <code>CLAUDE.md</code>.</span></td><td><span class="pill warn"><span lang="es">edita CLAUDE.md si dices sí</span><span lang="en">edits CLAUDE.md if you say yes</span></span></td></tr>
+        <tr><td><code>/aldc-verify:init</code></td><td><span lang="es">Solo tú</span><span lang="en">Only you</span></td><td><span lang="es">Aplica la capa a un repo AL nuevo. Primero hace un dry-run y luego te pide confirmar la versión de BC.</span><span lang="en">Applies the layer to a new AL repo. It first runs a dry run and then asks you to confirm the BC version.</span></td><td><span class="pill warn"><span lang="es">crea ficheros</span><span lang="en">creates files</span></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="guard">
+  <div class="eyebrow"><span lang="es">Barreras</span><span lang="en">Guardrails</span></div>
+  <h2><span lang="es">Qué deniega el guard</span><span lang="en">What the guard denies</span></h2>
+  <p class="prose" lang="es">El guard sustituye la supervisión humana en lo que no tiene vuelta atrás. Solo actúa en repos con algún <code>app.json</code>, sobre los comandos de <code>git</code> y <code>gh</code> que Claude lanza por Bash o PowerShell. Cuando deniega, Claude recibe el motivo y una alternativa. Todo lo demás pasa sin preguntar.</p>
+  <p class="prose" lang="en">The guard replaces human supervision for things that cannot be undone. It only acts in repos with an <code>app.json</code>, on the <code>git</code> and <code>gh</code> commands Claude runs through Bash or PowerShell. When it denies a command, Claude gets the reason and an alternative. Everything else goes through without asking.</p>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th><span lang="es">Comando</span><span lang="en">Command</span></th><th><span lang="es">Qué le dice a Claude</span><span lang="en">What it tells Claude</span></th></tr></thead>
+      <tbody>
+        <tr><td><code>gh pr merge</code></td><td><span lang="es">El merge lo decide una persona. Deja la PR abierta e informa.</span><span lang="en">A person decides the merge. Leave the PR open and report.</span></td></tr>
+        <tr><td><code>git push -f</code>, <code>--force-with-lease</code>, <code>--mirror</code>, <code>--delete</code>, <code>+ref</code></td><td><span lang="es">Push forzado o borrado de rama remota. Haz un push normal de una rama <code>claude/…</code>.</span><span lang="en">Forced push or remote branch deletion. Do a normal push of a <code>claude/…</code> branch.</span></td></tr>
+        <tr><td><code>git push</code> <span lang="es">a</span><span lang="en">to</span> <code>main</code>, <code>master</code>, <code>dev</code>, <code>develop</code></td><td><span lang="es">Trabaja en una rama <code>claude/…</code> y abre una PR. También si haces push sin destino estando en una de esas ramas.</span><span lang="en">Work on a <code>claude/…</code> branch and open a PR. This also applies to a push with no target while on one of those branches.</span></td></tr>
+        <tr><td><code>git add -A</code>, <code>.</code>, <code>--all</code>, <code>*</code></td><td><span lang="es">Añade los ficheros uno a uno por su ruta.</span><span lang="en">Add the files one by one by path.</span></td></tr>
+        <tr><td><code>git commit -a</code></td><td><span lang="es">Añade los ficheros uno a uno y haz commit sin <code>-a</code>.</span><span lang="en">Add the files one by one and commit without <code>-a</code>.</span></td></tr>
+        <tr><td><code>git add</code> <span lang="es">de una ruta protegida</span><span lang="en">of a protected path</span></td><td><span lang="es">Las carpetas de <code>guard.protectedPaths</code> quedan fuera de git. Sirve para datos que nunca deben entrar en git.</span><span lang="en">Folders in <code>guard.protectedPaths</code> stay out of git. Use it for data that must never be committed.</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <pre>// .claude/aldc-verify.json
+{
+  "bcMajor": 28,
+  "guard": { "protectedPaths": ["data/real-exports"] }
+}
+// "guard": false  →  <span lang="es">apaga el guard en este repo</span><span lang="en">turns the guard off in this repo</span></pre>
+</section>
+
+<section id="aldc">
+  <div class="eyebrow"><span lang="es">Con ALDC</span><span lang="en">With ALDC</span></div>
+  <h2><span lang="es">Cómo encaja con el plugin de ALDC</span><span lang="en">How it fits with the ALDC plugin</span></h2>
+  <p class="prose" lang="es">Desde el 20 de octubre de 2026, el plugin oficial de ALDC para Claude Code es la 5.1.1 (<code>aldc@aldc-marketplace</code>). Recomienda aldc-verify y avisa al empezar la sesión si no está instalado. Los hooks de los dos plugins son independientes: ninguno pisa al otro. La 5.1.1 está publicada (<a href="https://github.com/javiarmesto/ALDC-AL-Development-Collection/pull/130">PR #130</a>). El manual de ALDC está en <a href="https://claude.ai/artifact/Umr3Mp5Bwi1EocmghH3Dv8">esta página</a>.</p>
+  <p class="prose" lang="en">Since 20 October 2026, the official ALDC plugin for Claude Code is 5.1.1 (<code>aldc@aldc-marketplace</code>). It recommends aldc-verify and warns at session start if it is not installed. The two plugins' hooks are separate: neither overrides the other. 5.1.1 is released (<a href="https://github.com/javiarmesto/ALDC-AL-Development-Collection/pull/130">PR #130</a>). The ALDC manual is on <a href="https://claude.ai/artifact/Umr3Mp5Bwi1EocmghH3Dv8">this page</a>.</p>
+  <p class="prose" lang="es">Lo que une a los dos es el overlay. Cuando arranca un subagente <code>aldc:*</code> en un repo AL, aldc-verify le añade unas líneas de contexto según su rol:</p>
+  <p class="prose" lang="en">What joins the two is the overlay. When an <code>aldc:*</code> subagent starts in an AL repo, aldc-verify adds a few lines of context by role:</p>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th><span lang="es">Rol</span><span lang="en">Role</span></th><th><span lang="es">Subagentes</span><span lang="en">Subagents</span></th><th><span lang="es">Qué recibe</span><span lang="en">What it gets</span></th></tr></thead>
+      <tbody>
+        <tr><td><span lang="es">Escriben código</span><span lang="en">Write code</span></td><td class="msg">implement, developer, agent-builder</td><td><span lang="es">«Compila» se comprueba con <code>/aldc-verify:al-verify --l1</code> (o con <code>al-build-validator</code>) y se cita el resultado. En TDD, RED es «el test compila y describe el comportamiento». Ejecutar tests necesita un sandbox BC v28+; si no hay, es not-run.</span><span lang="en">"Compiles" is checked with <code>/aldc-verify:al-verify --l1</code> (or with <code>al-build-validator</code>) and the result is cited. In TDD, RED means "the test compiles and describes the behaviour". Running tests needs a BC v28+ sandbox; without one it is not-run.</span></td></tr>
+        <tr><td><span lang="es">Revisan</span><span lang="en">Review</span></td><td class="msg">review, dredd, triage</td><td><span lang="es">Citan los errores y warnings reales de <code>.claude/.aldc-verify/last-report.json</code> junto a BCQuality. Si falta o es antiguo, escriben «build: not-run». Siguen sin ejecutar nada.</span><span lang="en">They cite the real errors and warnings from <code>.claude/.aldc-verify/last-report.json</code> next to BCQuality. If it is missing or old, they write "build: not-run". They still run nothing.</span></td></tr>
+        <tr><td><span lang="es">Conductor</span><span lang="en">Conductor</span></td><td class="msg">conductor</td><td><span lang="es">Valida cada fase con <code>al-build-validator</code> y pega el resultado en el phase-complete. Entrega con <code>/aldc-verify:al-go</code>.</span><span lang="en">Validates each phase with <code>al-build-validator</code> and pastes the result into the phase-complete. Delivers with <code>/aldc-verify:al-go</code>.</span></td></tr>
+        <tr><td><span lang="es">Planifican</span><span lang="en">Plan</span></td><td class="msg">planning, architect, spec, presales</td><td><span lang="es">Incluyen la comprobación de «compila» con <code>/aldc-verify:al-verify</code> en cada fase del plan.</span><span lang="en">They include the "compiles" check with <code>/aldc-verify:al-verify</code> in each phase of the plan.</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="mensajes">
+  <div class="eyebrow"><span lang="es">Cómo leerlo</span><span lang="en">How to read it</span></div>
+  <h2><span lang="es">Los mensajes que verás</span><span lang="en">The messages you will see</span></h2>
+  <p class="prose" lang="es">Los mensajes del plugin salen en castellano. Aquí van tal cual.</p>
+  <p class="prose" lang="en">The plugin's messages are in Spanish. They are shown here as they appear.</p>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th><span lang="es">Estado</span><span lang="en">State</span></th><th><span lang="es">Mensaje</span><span lang="en">Message</span></th><th><span lang="es">Qué significa</span><span lang="en">What it means</span></th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill ok"><span lang="es">listo</span><span lang="en">ready</span></span></td><td class="msg">aldc-verify: compilador AL listo (alc 18.1…, fijado)</td><td><span lang="es">Al abrir la sesión. Si pone «sin fijar», el repo no tiene <code>aldc-verify.json</code>.</span><span lang="en">At session start. If it says "sin fijar" (not pinned), the repo has no <code>aldc-verify.json</code>.</span></td></tr>
+        <tr><td><span class="pill ok"><span lang="es">verde</span><span lang="en">green</span></span></td><td class="msg">aldc-verify: compila (BC 28 …)</td><td><span lang="es">Claude cambió AL y todo compila.</span><span lang="en">Claude changed AL and everything compiles.</span></td></tr>
+        <tr><td><span class="pill err"><span lang="es">bloquea</span><span lang="en">blocks</span></span></td><td class="msg">la compilación AL falla (intento 1/3)</td><td><span lang="es">Claude no puede terminar; está corrigiendo.</span><span lang="en">Claude cannot finish; it is fixing.</span></td></tr>
+        <tr><td><span class="pill err"><span lang="es">deniega</span><span lang="en">denies</span></span></td><td class="msg">aldc-verify guard: git add masivo…</td><td><span lang="es">El guard paró un comando. Claude debe cambiar de enfoque, no esquivarlo.</span><span lang="en">The guard stopped a command. Claude must change approach, not work around it.</span></td></tr>
+        <tr><td><span class="pill warn"><span lang="es">suelta</span><span lang="en">releases</span></span></td><td class="msg">sigue sin compilar tras 3 intentos · no ha cambiado nada tras el bloqueo</td><td><span lang="es">Revisa tú los errores: quedan en el mensaje.</span><span lang="en">Check the errors yourself: they stay in the message.</span></td></tr>
+        <tr><td><span class="pill warn">not-run</span></td><td class="msg">not-run · verificación incompleta</td><td><span lang="es">No se pudo compilar (sin compilador o sin símbolos). No hay nada que dar por bueno. <code>/al-go</code> se para aquí y no entrega.</span><span lang="en">It could not compile (no compiler or no symbols). Nothing can be taken as good. <code>/al-go</code> stops here and does not deliver.</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="prose" lang="es">Los warnings nunca bloquean. Solo bloquean los errores, o una regla que subas a <code>Error</code> en un ruleset.</p>
+  <p class="prose" lang="en">Warnings never block. Only errors block, or a rule you raise to <code>Error</code> in a ruleset.</p>
+</section>
+
+<section id="instalar">
+  <div class="eyebrow"><span lang="es">Empezar</span><span lang="en">Getting started</span></div>
+  <h2><span lang="es">Instalar y actualizar</span><span lang="en">Install and update</span></h2>
+  <div class="cmdbox">
+    <p class="prose" lang="es">En tu máquina, una vez:</p>
+    <p class="prose" lang="en">On your machine, once:</p>
+    <pre>claude plugin marketplace add javiarmesto/aldc-verify-plugin
+claude plugin install aldc-verify@aldc-verify-dev</pre>
+    <p class="prose" lang="es">Para pasar a una versión nueva, actualiza el marketplace y el plugin, y reinicia Claude Code:</p>
+    <p class="prose" lang="en">To move to a new version, update the marketplace and the plugin, then restart Claude Code:</p>
+    <pre>claude plugin marketplace update aldc-verify-dev
+claude plugin update aldc-verify@aldc-verify-dev</pre>
+    <p class="prose" lang="es">En la nube (claude.ai/code), el <code>.claude/settings.json</code> del repo no basta. Pon las dos líneas de instalación en el setup script del entorno. Solo se ejecuta en sesiones nuevas. Para probar una copia local sin instalarla: <code>claude --plugin-dir &lt;ruta&gt;</code>.</p>
+    <p class="prose" lang="en">In the cloud (claude.ai/code), the repo's <code>.claude/settings.json</code> is not enough. Put the two install lines in the environment's setup script. It only runs in new sessions. To try a local copy without installing it: <code>claude --plugin-dir &lt;path&gt;</code>.</p>
+  </div>
+
+  <h3><span lang="es">Primeros pasos</span><span lang="en">First steps</span></h3>
+  <p class="progress" id="progress" aria-live="polite"></p>
+  <ol class="steps" id="steps">
+    <li class="step"><input type="checkbox" id="s1"><label for="s1"><span lang="es">Instala o actualiza a la 0.3.0</span><span lang="en">Install or update to 0.3.0</span></label>
+      <div class="detail"><span class="expect" lang="es">Esperado: <code>claude plugin list</code> muestra <code>aldc-verify@aldc-verify-dev</code> en la 0.3.0.</span><span class="expect" lang="en">Expected: <code>claude plugin list</code> shows <code>aldc-verify@aldc-verify-dev</code> at 0.3.0.</span></div></li>
+    <li class="step"><input type="checkbox" id="s2"><label for="s2"><span lang="es">Abre Claude Code en un repo AL</span><span lang="en">Open Claude Code in an AL repo</span></label>
+      <div class="detail"><span class="expect" lang="es">Esperado: la línea «aldc-verify: compilador AL listo (…)». Si pone «sin fijar», sigue con el paso 3.</span><span class="expect" lang="en">Expected: the line "aldc-verify: compilador AL listo (…)". If it says "sin fijar", go on to step 3.</span></div></li>
+    <li class="step"><input type="checkbox" id="s3"><label for="s3"><span lang="es">Aplica la capa con <code>/aldc-verify:init</code></span><span lang="en">Apply the layer with <code>/aldc-verify:init</code></span></label>
+      <div class="detail"><span class="expect" lang="es">Esperado: un dry-run con la versión de BC, los proyectos y el compilador fijado. Confirma la versión antes de aplicar. Solo una vez por repo.</span><span class="expect" lang="en">Expected: a dry run with the BC version, the projects and the pinned compiler. Confirm the version before applying. Only once per repo.</span></div></li>
+    <li class="step"><input type="checkbox" id="s4"><label for="s4"><span lang="es">Pide <code>/aldc-verify:al-verify</code></span><span lang="en">Ask for <code>/aldc-verify:al-verify</code></span></label>
+      <div class="detail"><span class="expect" lang="es">Esperado: un resumen por proyecto con errores y warnings agrupados por código. No edita nada.</span><span class="expect" lang="en">Expected: a summary per project with errors and warnings grouped by code. It edits nothing.</span></div></li>
+    <li class="step"><input type="checkbox" id="s5"><label for="s5"><span lang="es">Pide un cambio pequeño de AL</span><span lang="en">Ask for a small AL change</span></label>
+      <div class="detail"><span class="expect" lang="es">Esperado: al terminar, «aldc-verify: compila…». Si se le escapa un error, verás «intento 1/3» y Claude lo corrige solo.</span><span class="expect" lang="en">Expected: at the end, "aldc-verify: compila…". If an error slips through, you will see "intento 1/3" and Claude fixes it on its own.</span></div></li>
+    <li class="step"><input type="checkbox" id="s6"><label for="s6"><span lang="es">Comprueba el guard</span><span lang="en">Check the guard</span></label>
+      <div class="detail"><span class="expect" lang="es">Pide a Claude que haga <code>git add -A</code>. Esperado: «aldc-verify guard: git add masivo…» y Claude propone <code>git add &lt;ruta&gt;</code>.</span><span class="expect" lang="en">Ask Claude to run <code>git add -A</code>. Expected: "aldc-verify guard: git add masivo…" and Claude proposes <code>git add &lt;path&gt;</code>.</span></div></li>
+    <li class="step"><input type="checkbox" id="s7"><label for="s7"><span lang="es">Si usas ALDC, delega en <code>aldc:al-developer</code></span><span lang="en">If you use ALDC, delegate to <code>aldc:al-developer</code></span></label>
+      <div class="detail"><span class="expect" lang="es">Esperado: el subagente cita el resultado de <code>/al-verify --l1</code>. Si deja algo roto, SubagentStop lo para antes de devolver el control.</span><span class="expect" lang="en">Expected: the subagent cites the <code>/al-verify --l1</code> result. If it leaves something broken, SubagentStop stops it before it hands back control.</span></div></li>
+    <li class="step"><input type="checkbox" id="s8"><label for="s8"><span lang="es">Entrega con <code>/aldc-verify:al-go</code></span><span lang="en">Deliver with <code>/aldc-verify:al-go</code></span></label>
+      <div class="detail"><span class="expect" lang="es">Esperado: rama <code>claude/…</code>, verify en verde, commits fichero a fichero, push y una PR en borrador. No pregunta y no mergea.</span><span class="expect" lang="en">Expected: a <code>claude/…</code> branch, green verify, file-by-file commits, push and a draft PR. It does not ask and does not merge.</span></div></li>
+    <li class="step"><input type="checkbox" id="s9"><label for="s9"><span lang="es">Si algo raro pasa, mira el historial</span><span lang="en">If something odd happens, check the history</span></label>
+      <div class="detail"><pre>.claude/.aldc-verify/state.json   → history
+set ALDC_VERIFY_DEBUG=1           → <span lang="es">trazas del gate</span><span lang="en">gate traces</span></pre></div></li>
+  </ol>
+</section>
+
+<section id="pruebas">
+  <div class="eyebrow"><span lang="es">Evidencia</span><span lang="en">Evidence</span></div>
+  <h2><span lang="es">Qué se ha probado en la 0.3.0</span><span lang="en">What was tested in 0.3.0</span></h2>
+  <p class="prose" lang="es">En Windows, el 15 de octubre de 2026. Las pruebas de la 0.2.x (gate, lock, nube, segundo repo) siguen en el README del plugin.</p>
+  <p class="prose" lang="en">On Windows, 15 October 2026. The 0.2.x tests (gate, lock, cloud, second repo) are still in the plugin README.</p>
+  <div class="tablebox">
+    <table>
+      <thead><tr><th><span lang="es">Caso</span><span lang="en">Case</span></th><th><span lang="es">Resultado</span><span lang="en">Result</span></th></tr></thead>
+      <tbody>
+        <tr><td><span lang="es">Guard, 21 comandos de ejemplo</span><span lang="en">Guard, 21 sample commands</span></td><td><span class="pill ok">21/21</span> <span lang="es">bien clasificados.</span><span lang="en">correctly classified.</span></td></tr>
+        <tr><td><span lang="es"><code>claude -p</code> que pide <code>git add -A</code> y <code>commit -am</code></span><span lang="en"><code>claude -p</code> asking for <code>git add -A</code> and <code>commit -am</code></span></td><td><span class="pill ok"><span lang="es">denegado</span><span lang="en">denied</span></span> <span lang="es">Con Bash y con PowerShell, con el motivo. Claude no lo esquiva y propone <code>git add &lt;ruta&gt;</code>.</span><span lang="en">With Bash and with PowerShell, with the reason. Claude does not work around it and proposes <code>git add &lt;path&gt;</code>.</span></td></tr>
+        <tr><td><span lang="es">Overlay en <code>aldc:al-review-subagent</code></span><span lang="en">Overlay on <code>aldc:al-review-subagent</code></span></td><td><span class="pill ok"><span lang="es">recibido</span><span lang="en">received</span></span> <span lang="es">El subagente recibe las instrucciones de evidencia de build.</span><span lang="en">The subagent gets the build-evidence instructions.</span></td></tr>
+        <tr><td><span lang="es"><code>/al-go</code> autónomo contra un remoto local</span><span lang="en">Autonomous <code>/al-go</code> against a local remote</span></td><td><span class="pill warn"><span lang="es">sin PR</span><span lang="en">no PR</span></span> <span lang="es">Crea <code>claude/owner-header</code>, verifica en verde, hace un commit y el push. No sube versión porque no hay regla. La PR no se abre porque el remoto no es GitHub; deja el texto preparado.</span><span lang="en">Creates <code>claude/owner-header</code>, verifies green, makes a commit and pushes. It does not bump the version because there is no rule. The PR is not opened because the remote is not GitHub; it leaves the text ready.</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note" lang="es"><strong>Sin probar todavía:</strong> la apertura real de la PR desde <code>/al-go</code> contra GitHub; el aviso de «ya compila en verde» tras un bloqueo, que solo se ha probado simulado; y la CI <code>al-compile.yml</code>, que no se ha ejecutado en GitHub Actions.</div>
+  <div class="note" lang="en"><strong>Not tested yet:</strong> actually opening the PR from <code>/al-go</code> against GitHub; the "now green" notice after a block, which has only been tested simulated; and the <code>al-compile.yml</code> CI, which has not run on GitHub Actions.</div>
+</section>
+
+<footer><span lang="es">aldc-verify 0.3.0 · guía del 20 de octubre de 2026</span><span lang="en">aldc-verify 0.3.0 · guide of 20 October 2026</span></footer>
+
+</div>
+</div>
+
+<script>
+(function () {
+  var LANG_KEY = 'aldc-verify-guide:lang';
+  var STEPS_KEY = 'aldc-verify-guide:steps';
+  var app = document.getElementById('app');
+  var svg = document.getElementById('arch-svg');
+  var progress = document.getElementById('progress');
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('#steps input[type=checkbox]'));
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-lang-set]'));
+  var lang = 'es';
+  var saved = {};
+
+  function renderProgress() {
+    var done = 0;
+    boxes.forEach(function (b) {
+      b.closest('.step').classList.toggle('done', b.checked);
+      if (b.checked) done++;
+    });
+    progress.textContent = lang === 'es'
+      ? done + ' de ' + boxes.length + ' hechos'
+      : done + ' of ' + boxes.length + ' done';
+  }
+
+  function setLang(next) {
+    lang = next === 'en' ? 'en' : 'es';
+    app.dataset.lang = lang;
+    document.documentElement.lang = lang;
+    buttons.forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-lang-set') === lang ? 'true' : 'false');
+    });
+    if (svg) svg.setAttribute('aria-label', svg.getAttribute('data-label-' + lang) || '');
+    try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+    renderProgress();
+  }
+
+  var initial = null;
+  try { initial = localStorage.getItem(LANG_KEY); } catch (e) { initial = null; }
+  if (initial !== 'es' && initial !== 'en') {
+    var nav = (navigator.language || '').toLowerCase();
+    initial = nav.indexOf('es') === 0 ? 'es' : 'en';
+  }
+
+  try { saved = JSON.parse(localStorage.getItem(STEPS_KEY) || '{}') || {}; } catch (e) { saved = {}; }
+  boxes.forEach(function (b) {
+    b.checked = !!saved[b.id];
+    b.addEventListener('change', function () {
+      saved[b.id] = b.checked;
+      try { localStorage.setItem(STEPS_KEY, JSON.stringify(saved)); } catch (e) {}
+      renderProgress();
+    });
+  });
+  buttons.forEach(function (b) {
+    b.addEventListener('click', function () { setLang(b.getAttribute('data-lang-set')); });
+  });
+
+  setLang(initial);
+})();
+</script>

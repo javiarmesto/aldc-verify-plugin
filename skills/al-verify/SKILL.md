@@ -22,7 +22,7 @@ The full diagnostics are in `.claude/.aldc-verify/last-report.json`. Read it onl
 
 ## How to report
 
-Reply to the user in Spanish, in at most 8 lines:
+Reply in the user's language (the plugin's `language` setting, or the language the user writes in), in at most 8 lines:
 
 1. One line per project: errors, compiler warnings, analyzer warnings.
 2. Errors first, each as `file(line,col): CODE: message`.
@@ -30,9 +30,9 @@ Reply to the user in Spanish, in at most 8 lines:
 
 ## Rules
 
-- Never report "compila" or "0 errores" without having run this command in this turn. If it returned `not-run`, say **not-run** and why.
+- Never report "compiles" or "0 errors" without having run this command in this turn. If it returned `not-run`, say **not-run** and why.
 - **Invoked by the user** (`/al-verify` is the request itself): report only. Do not edit any file, not even to fix errors; offer the fix in one line and wait.
 - **Invoked by you during a task**: errors in the code you changed block. Fix them and run `/al-verify` again before finishing. Pre-existing errors: report them, don't fix them unless the task requires it.
 - Analyzer and compiler warnings never block. Only touch warnings on lines you changed in this task.
 - Repo-specific known warnings (that never block) belong in the repo's CLAUDE.md, not here.
-- The compiler version is pinned per repo in `.claude/aldc-verify.json` (`compiler.alExtension` or `compiler.alTool`, plus `bcMajor`). If the summary says "sin fijar", mention it once.
+- The compiler version is pinned per repo in `.claude/aldc-verify.json` (`compiler.alExtension` or `compiler.alTool`, plus `bcMajor`). If the summary says "not pinned" ("sin fijar" in Spanish), mention it once.

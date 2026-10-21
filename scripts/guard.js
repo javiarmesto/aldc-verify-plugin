@@ -4,12 +4,14 @@
 // can't be undone or breaks the repo rules. Active in AL repos; `"guard": false` in
 // .claude/aldc-verify.json turns it off, `guard.protectedPaths` adds folders git must never add.
 // Denies: gh pr merge, force pushes, pushes to the default branch, git add -A / . / --all,
-// git commit -a, git add of protected paths (customer data).
+// git commit -a, git add of protected paths (data that must never be committed).
 
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const env = require('./lib/al-env');
+const msg = require('./lib/messages');
+const { t } = msg;
 
 const DEFAULT_BRANCHES = new Set(['main', 'master', 'dev', 'develop']);
 
@@ -57,7 +59,7 @@ function check(command, cwd, cfg) {
   for (const seg of segments(command)) {
     const tok = tokens(seg);
     if (/(^|[\\/])gh(\.exe)?$/i.test(tok[0] || '') && tok[1] === 'pr' && tok[2] === 'merge') {
-      return 'el merge de una PR lo decide una persona. Deja la PR abierta e informa.';
+      return t('guardMerge');
     }
     const g = gitArgs(tok);
     if (!g || !g.length) continue;
@@ -65,32 +67,32 @@ function check(command, cwd, cfg) {
 
     if (sub === 'push') {
       if (args.some((a) => /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--delete|-d)$/.test(a) || /^\+/.test(a))) {
-        return 'push forzado o borrado de rama remota. Haz un push normal de una rama claude/... .';
+        return t('guardForce');
       }
       const refs = args.filter((a) => !a.startsWith('-'));
       const targets = refs.slice(1).map((r) => r.split(':').pop().replace(/^refs\/heads\//, '').toLowerCase());
       if (targets.some((t) => DEFAULT_BRANCHES.has(t))) {
-        return `push a la rama por defecto (${targets.join(', ')}). Trabaja en una rama claude/... y abre una PR.`;
+        return t('guardPushDefault', targets.join(', '));
       }
       if (!targets.length) {
         const branch = currentBranch(cwd).toLowerCase();
-        if (DEFAULT_BRANCHES.has(branch)) return `estás en ${branch}: crea una rama claude/... antes de hacer push.`;
+        if (DEFAULT_BRANCHES.has(branch)) return t('guardOnDefault', branch);
       }
     }
 
     if (sub === 'add') {
       if (args.some((a) => a === '-A' || a === '--all' || a === '.' || a === ':/' || a === '*' || /^-[a-zA-Z]*A/.test(a))) {
-        return 'git add masivo. Añade los ficheros uno a uno por su ruta.';
+        return t('guardMassAdd');
       }
       for (const a of args.filter((x) => !x.startsWith('-'))) {
         const rel = a.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
         const hit = protectedPaths.find((p) => rel === p.slice(0, -1) || rel.startsWith(p));
-        if (hit) return `${a} está en una carpeta protegida (${hit}): datos de cliente fuera de git.`;
+        if (hit) return t('guardProtected', a, hit);
       }
     }
 
     if (sub === 'commit' && args.some((a) => a === '-a' || a === '--all' || /^-[a-zA-Z]*a[a-zA-Z]*$/.test(a) && !a.startsWith('--'))) {
-      return 'git commit -a. Añade los ficheros uno a uno y haz commit sin -a.';
+      return t('guardCommitA');
     }
   }
   return null;
@@ -103,6 +105,7 @@ function main() {
   if (!command || !/\b(git|gh)\b/.test(command)) return 0;
   const root = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
   if (!env.findProjects(root).length) return 0;
+  msg.init(root);
   const cfg = env.loadConfig(root);
   if (cfg.guard === false) return 0;
   const reason = check(command, input.cwd || root, cfg);
