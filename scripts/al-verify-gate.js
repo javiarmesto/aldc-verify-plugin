@@ -75,7 +75,15 @@ function main() {
   const who0 = sub ? `el subagente ${input.agent_type || sub}` : 'Claude';
 
   const fp = env.fingerprint(root, projects, { bcMajor: env.targetBcMajor(cfg, projects), compiler: cfg.compiler });
-  if (state.lastGreen === fp) { debug('huella ya verde'); return 0; }
+  if (state.lastGreen === fp) {
+    debug('huella ya verde');
+    // In a worktree, say so in the project's history: the subagent already compiled this exact tree green.
+    if (root !== projectRoot) {
+      const main = env.readState(projectRoot);
+      env.writeState(projectRoot, { ...main, history: env.appendHistory(main, { status: 'green', cached: true, worktree: path.relative(projectRoot, root).split(path.sep).join('/'), ...(sub ? { agent: input.agent_type || sub } : {}) }, HISTORY) });
+    }
+    return 0;
+  }
   // Unchanged since the turn started: whatever state the tree is in, Claude didn't cause it.
   if (state.turnBaseline && state.turnBaseline === fp) { debug('sin cambios AL en el turno'); return 0; }
   const max = Number(cfg.maxAttempts) || 3;
