@@ -60,7 +60,8 @@ function gateRoot(input) {
 function main() {
   const input = readStdin();
   const root = gateRoot(input);
-  if (root !== (process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd())) debug(`worktree del subagente: ${root}`);
+  const projectRoot = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+  if (root !== projectRoot) debug(`worktree del subagente: ${root}`);
   const projects = env.findProjects(root);
   if (!projects.length) { debug('sin proyectos'); return 0; }
 
@@ -113,6 +114,11 @@ ${slot.lastListed || '(ver .claude/.aldc-verify/last-report.json)'}`);
       Object.assign(next, slotPatch);
     }
     env.writeState(root, next);
+    // A worktree's own state is removed with the worktree: leave an audit line in the project's history too.
+    if (root !== projectRoot) {
+      const main = env.readState(projectRoot);
+      env.writeState(projectRoot, { ...main, history: env.appendHistory(main, { ...event, worktree: path.relative(projectRoot, root).split(path.sep).join('/'), ...(sub ? { agent: input.agent_type || sub } : {}) }, HISTORY) });
+    }
   };
 
   if (result.status === 'not-run') {
