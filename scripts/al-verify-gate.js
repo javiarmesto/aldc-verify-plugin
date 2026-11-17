@@ -5,6 +5,7 @@
 // After maxAttempts blocked stops in a row it lets Claude stop and tells the user why.
 
 const path = require('path');
+const { spawnSync } = require('child_process');
 const env = require('./lib/al-env');
 
 const MAX_LISTED = 40;
@@ -43,9 +44,23 @@ function summary(result) {
     .join('; ');
 }
 
+// A subagent launched with isolation: worktree stops in its own linked worktree of the project:
+// compile that worktree, not the main checkout (where nothing changed). Anything else: the project.
+function gateRoot(input) {
+  const project = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+  if (input.hook_event_name !== 'SubagentStop' || !input.cwd) return project;
+  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: input.cwd, encoding: 'utf8', timeout: 5000 });
+  if (top.status !== 0) return project;
+  const worktree = path.resolve(top.stdout.trim());
+  if (worktree === path.resolve(project)) return project;
+  const main = env.mainCheckout(worktree);
+  return main && path.resolve(main) === path.resolve(project) ? worktree : project;
+}
+
 function main() {
   const input = readStdin();
-  const root = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+  const root = gateRoot(input);
+  if (root !== (process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd())) debug(`worktree del subagente: ${root}`);
   const projects = env.findProjects(root);
   if (!projects.length) { debug('sin proyectos'); return 0; }
 
