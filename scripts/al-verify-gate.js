@@ -5,6 +5,7 @@
 // After maxAttempts blocked stops in a row it lets Claude stop and tells the user why.
 
 const path = require('path');
+const { spawnSync } = require('child_process');
 const env = require('./lib/al-env');
 
 const MAX_LISTED = 40;
@@ -43,9 +44,24 @@ function summary(result) {
     .join('; ');
 }
 
+// A subagent launched with isolation: worktree stops in its own linked worktree of the project:
+// compile that worktree, not the main checkout (where nothing changed). Anything else: the project.
+function gateRoot(input) {
+  const project = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+  if (input.hook_event_name !== 'SubagentStop' || !input.cwd) return project;
+  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: input.cwd, encoding: 'utf8', timeout: 5000 });
+  if (top.status !== 0) return project;
+  const worktree = path.resolve(top.stdout.trim());
+  if (worktree === path.resolve(project)) return project;
+  const main = env.mainCheckout(worktree);
+  return main && path.resolve(main) === path.resolve(project) ? worktree : project;
+}
+
 function main() {
   const input = readStdin();
-  const root = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+  const root = gateRoot(input);
+  const projectRoot = process.env.CLAUDE_PROJECT_DIR || input.cwd || process.cwd();
+  if (root !== projectRoot) debug(`worktree del subagente: ${root}`);
   const projects = env.findProjects(root);
   if (!projects.length) { debug('sin proyectos'); return 0; }
 
@@ -59,7 +75,15 @@ function main() {
   const who0 = sub ? `el subagente ${input.agent_type || sub}` : 'Claude';
 
   const fp = env.fingerprint(root, projects, { bcMajor: env.targetBcMajor(cfg, projects), compiler: cfg.compiler });
-  if (state.lastGreen === fp) { debug('huella ya verde'); return 0; }
+  if (state.lastGreen === fp) {
+    debug('huella ya verde');
+    // In a worktree, say so in the project's history: the subagent already compiled this exact tree green.
+    if (root !== projectRoot) {
+      const main = env.readState(projectRoot);
+      env.writeState(projectRoot, { ...main, history: env.appendHistory(main, { status: 'green', cached: true, worktree: path.relative(projectRoot, root).split(path.sep).join('/'), ...(sub ? { agent: input.agent_type || sub } : {}) }, HISTORY) });
+    }
+    return 0;
+  }
   // Unchanged since the turn started: whatever state the tree is in, Claude didn't cause it.
   if (state.turnBaseline && state.turnBaseline === fp) { debug('sin cambios AL en el turno'); return 0; }
   const max = Number(cfg.maxAttempts) || 3;
@@ -98,6 +122,11 @@ ${slot.lastListed || '(ver .claude/.aldc-verify/last-report.json)'}`);
       Object.assign(next, slotPatch);
     }
     env.writeState(root, next);
+    // A worktree's own state is removed with the worktree: leave an audit line in the project's history too.
+    if (root !== projectRoot) {
+      const main = env.readState(projectRoot);
+      env.writeState(projectRoot, { ...main, history: env.appendHistory(main, { ...event, worktree: path.relative(projectRoot, root).split(path.sep).join('/'), ...(sub ? { agent: input.agent_type || sub } : {}) }, HISTORY) });
+    }
   };
 
   if (result.status === 'not-run') {

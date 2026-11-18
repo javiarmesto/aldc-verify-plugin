@@ -32,6 +32,8 @@ También se puede activar por repo en `.claude/settings.json`. Con esto en modo 
 
 ## Estado
 
+v0.3.1: SubagentStop compila el worktree del subagente. Un subagente lanzado con `isolation: worktree` termina en su propio worktree del repositorio. Hasta ahora el gate compilaba siempre el checkout principal (`CLAUDE_PROJECT_DIR`), donde no había cambiado nada, y el código del worktree no se compilaba. Ahora, si el `cwd` del subagente es otro worktree del mismo repositorio, el gate compila ese worktree. El worktree toma los símbolos del checkout principal, y también su `.claude/aldc-verify.json` si no tiene uno propio. El estado del gate queda en el `.claude/.aldc-verify/` del worktree. Probado en Windows con un error sembrado: el gate bloquea con `AL0118` en el worktree y, una vez corregido, da verde. El checkout principal no se compila.
+
 v0.3.0: los agentes entregan solos, con barreras automáticas en vez de supervisión humana.
 
 - **Guard (PreToolUse, Bash y PowerShell).** En repos AL deniega `gh pr merge`, los push forzados o de borrado, el push a `main`/`master`/`dev`/`develop`, `git add -A`/`.`/`--all`, `git commit -a`, y el `git add` de `guard.protectedPaths` (carpetas con datos de cliente). Se apaga con `"guard": false` en `.claude/aldc-verify.json`.
