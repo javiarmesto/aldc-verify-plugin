@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
+const { t } = require('./messages');
 
 const STATE_DIR = path.join('.claude', '.aldc-verify');
 const CONFIG_FILE = path.join('.claude', 'aldc-verify.json');
@@ -123,7 +124,7 @@ function findCompiler(cfg) {
   if (explicit) {
     return fs.existsSync(explicit)
       ? { cmd: explicit, args: [], version: 'path', source: explicit, binDir: path.dirname(explicit) }
-      : { error: `compiler.path no existe: ${explicit}` };
+      : { error: t('compilerPathMissing', explicit) };
   }
 
   const home = os.homedir();
@@ -149,7 +150,7 @@ function findCompiler(cfg) {
       .filter((x) => x.version === c.alExtension || x.version.startsWith(c.alExtension + '.'))
       .sort((a, b) => compareVersions(b.version, a.version))[0];
     if (pinned) return { ...pinned, pinned: true };
-    if (!c.alTool) return { error: `no encuentro la extensión AL fijada (alExtension ${c.alExtension}); instaladas: ${candidates.map((x) => x.version).join(', ') || 'ninguna'}` };
+    if (!c.alTool) return { error: t('pinnedExtMissing', c.alExtension, candidates.map((x) => x.version).join(', ')) };
   }
 
   // dotnet tool `al` (Linux/cloud, or Windows with the tool installed).
@@ -158,10 +159,10 @@ function findCompiler(cfg) {
   if (fs.existsSync(toolPath)) {
     return { cmd: toolPath, args: ['compile'], version: c.alTool || 'dotnet-tool', source: 'dotnet-tool', pinned: !!c.alTool, binDir: dotnetToolBinDir(home, c.alTool) };
   }
-  if (c.alTool) return { error: `no encuentro la herramienta dotnet 'al' fijada (alTool ${c.alTool})` };
+  if (c.alTool) return { error: t('pinnedToolMissing', c.alTool) };
 
   const latest = candidates.sort((a, b) => compareVersions(b.version, a.version))[0];
-  return latest ? { ...latest, pinned: false } : { error: 'no encuentro alc.exe (extensión AL de VS Code) ni la herramienta dotnet `al`' };
+  return latest ? { ...latest, pinned: false } : { error: t('noCompiler') };
 }
 
 // Microsoft symbols: keep the BC-major build when one exists, otherwise what is there.
@@ -182,7 +183,7 @@ function symbolSource(root, project) {
     const mainRoot = path.dirname(common.stdout.trim());
     if (path.resolve(mainRoot) !== path.resolve(root)) {
       const dir = path.join(mainRoot, path.relative(root, project.dir), '.alpackages');
-      if (hasApps(dir)) return { dir, from: 'checkout principal' };
+      if (hasApps(dir)) return { dir, from: t('mainCheckout') };
     }
   }
   return { dir: own, from: null };
@@ -362,7 +363,7 @@ function verifyAllUnlocked(root, opts = {}) {
   if (opts.only) {
     // Keep the requested project plus the in-repo projects it needs.
     const want = projects.find((p) => p.rel.toLowerCase() === opts.only.toLowerCase() || p.manifest.name.toLowerCase() === opts.only.toLowerCase());
-    if (!want) return { status: 'not-run', reason: `no encuentro el proyecto ${opts.only}`, projects, bcMajor };
+    if (!want) return { status: 'not-run', reason: t('projectNotFound', opts.only), projects, bcMajor };
     const keep = new Set();
     (function add(p) { if (keep.has(p)) return; keep.add(p); (p.inRepoDeps || []).forEach(add); })(want);
     projects = projects.filter((p) => keep.has(p));
@@ -378,12 +379,12 @@ function verifyAllUnlocked(root, opts = {}) {
   const results = [];
   for (const p of projects) {
     const failedDep = (p.inRepoDeps || []).find((d) => !built.has(d));
-    if (failedDep) { results.push({ project: p, skipped: `depende de ${failedDep.rel}, que no compila` }); continue; }
+    if (failedDep) { results.push({ project: p, skipped: t('dependsOnFailed', failedDep.rel) }); continue; }
     const slug = p.rel.replace(/[\\/:. ]+/g, '_') || 'root';
     const cacheDir = path.join(runDir, 'cache', slug);
     const fresh = (p.inRepoDeps || []).flatMap((d) => built.get(d));
     const cache = prepareCache(p, projectBcMajor(cfg, p, bcMajor), cacheDir, fresh, inRepoPrefixes, root);
-    if (!cache.hadSymbols) { results.push({ project: p, skipped: `no hay símbolos en ${path.join(p.rel, '.alpackages')}` }); continue; }
+    if (!cache.hadSymbols) { results.push({ project: p, skipped: t('noSymbols', path.join(p.rel, '.alpackages')) }); continue; }
     const l2 = opts.analyzers ? analyzerSettings(root, p, cfg, compiler) : null;
     const r = compileProject(compiler, p, {
       cacheDir, outDir: path.join(runDir, 'out', slug), cwd: root,
@@ -404,7 +405,7 @@ function verifyAllUnlocked(root, opts = {}) {
 // files alc writes inside the project folder and fail without diagnostics.
 function verifyAll(root, opts = {}) {
   const lock = acquireLock(root, opts.lockTimeoutMs || 300000);
-  if (!lock) return { status: 'not-run', reason: 'otra compilación de este repo sigue en marcha tras 5 min de espera', projects: findProjects(root) };
+  if (!lock) return { status: 'not-run', reason: t('lockTimeout'), projects: findProjects(root) };
   try { return verifyAllUnlocked(root, opts); } finally { releaseLock(lock); }
 }
 

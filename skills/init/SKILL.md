@@ -14,9 +14,9 @@ allowed-tools: Bash(node:*), Bash(git status:*), Bash(git branch:*), Read
    node "${CLAUDE_PLUGIN_ROOT}/scripts/init.js" --dry-run $ARGUMENTS
    ```
 
-   Show the user the detected values (BC version, projects, compiler pin, plans folder, default branch) and the list of `would-*` / `skipped` lines, in Spanish.
+   Show the user the detected values (BC version, projects, compiler pin, plans folder, default branch) and the list of `would-*` / `skipped` lines, in the user's language.
 
-2. **Confirm the pin.** The compiler version is pinned per repo, according to the customer's BC version. If the detected `alExtension` or `alTool` might not match the customer's BC, ask before applying, and rerun with `--bc`, `--al-extension` or `--al-tool`.
+2. **Confirm the pin.** The compiler version is pinned per repo, according to the BC version the extension targets. If the detected `alExtension` or `alTool` might not match that BC version, ask before applying, and rerun with `--bc`, `--al-extension` or `--al-tool`.
 
 3. **Apply only after the user says yes** (same arguments, without `--dry-run`).
 

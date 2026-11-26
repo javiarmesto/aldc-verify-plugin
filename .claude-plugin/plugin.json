@@ -1,7 +1,7 @@
 {
   "name": "aldc-verify",
   "displayName": "ALDC Verify",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Verifiable AL loop for Business Central: compile, analyzers and a Stop gate so the agent checks its own work before finishing.",
   "author": {
     "name": "javiarmesto",

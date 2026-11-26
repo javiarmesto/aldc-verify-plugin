@@ -8,6 +8,8 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const env = require('./lib/al-env');
+const msg = require('./lib/messages');
+const { t } = msg;
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..');
 const PLUGIN_REF = 'v' + require(path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json')).version;
@@ -54,8 +56,9 @@ function mergeMissing(target, source) {
 function main() {
   const a = parseArgs(process.argv.slice(2));
   const root = path.resolve(a.root || process.env.CLAUDE_PROJECT_DIR || process.cwd());
+  const lang = msg.init(root);
   const projects = env.findProjects(root);
-  if (!projects.length) { console.log(`aldc-verify init: not-run, no hay ningún app.json en ${root}.`); return 3; }
+  if (!projects.length) { console.log(t('initNoProjects', root)); return 3; }
 
   const cfg = env.loadConfig(root);
   const bcMajor = a.bc || env.targetBcMajor(cfg, projects);
@@ -67,7 +70,7 @@ function main() {
     bcMajor: cfg.bcMajor || bcMajor,
     alExtension: (cfg.compiler && cfg.compiler.alExtension) || alExtension,
     alTool: (cfg.compiler && cfg.compiler.alTool) || alTool,
-    source: fs.existsSync(path.join(root, '.claude', 'aldc-verify.json')) ? 'fijado en .claude/aldc-verify.json' : 'detectado; se fijará',
+    source: fs.existsSync(path.join(root, '.claude', 'aldc-verify.json')) ? t('initPinnedSource') : t('initDetectedSource'),
   };
   // Repo name from the origin remote (a worktree folder name is not the repo name).
   const remote = git(root, ['remote', 'get-url', 'origin']);
@@ -94,7 +97,7 @@ function main() {
 
   // 1. Per-repo pin.
   const pinRel = '.claude/aldc-verify.json';
-  if (fs.existsSync(path.join(root, pinRel))) out.push(`skipped: ${pinRel} (ya existe)`);
+  if (fs.existsSync(path.join(root, pinRel))) out.push(`skipped: ${pinRel} (${t('initExists')})`);
   else {
     const pin = { bcMajor, compiler: { ...(alExtension ? { alExtension } : {}), alTool }, maxAttempts: 3 };
     write(pinRel, JSON.stringify(pin, null, 2) + '\n', 'created');
@@ -108,23 +111,24 @@ function main() {
   else {
     let current;
     try { current = JSON.parse(fs.readFileSync(setFile, 'utf8').replace(/^﻿/, '')); } catch { current = null; }
-    if (!current) out.push(`skipped: ${setRel} (no es JSON válido; no lo toco)`);
+    if (!current) out.push(`skipped: ${setRel} (${t('initInvalidJson')})`);
     else {
       const added = mergeMissing(current, template);
       if (added.length) { write(setRel, JSON.stringify(current, null, 2) + '\n', 'merged'); out[out.length - 1] += ` (+ ${added.join(', ')})`; }
-      else out.push(`skipped: ${setRel} (ya tiene todo)`);
+      else out.push(`skipped: ${setRel} (${t('initHasAll')})`);
     }
   }
 
-  // 3. CLAUDE.md only if missing.
+  // 3. CLAUDE.md only if missing, in the message language (templates/CLAUDE.md or CLAUDE.es.md).
+  const claudeTemplate = path.join(PLUGIN_ROOT, 'templates', lang === 'es' ? 'CLAUDE.es.md' : 'CLAUDE.md');
   if (!a.claudeMd) out.push('skipped: CLAUDE.md (--no-claude-md)');
-  else if (fs.existsSync(path.join(root, 'CLAUDE.md'))) out.push('skipped: CLAUDE.md (ya existe; usa /aldc-verify:al-learn para añadir reglas)');
-  else write('CLAUDE.md', fill(fs.readFileSync(path.join(PLUGIN_ROOT, 'templates', 'CLAUDE.md'), 'utf8'), vars), 'created');
+  else if (fs.existsSync(path.join(root, 'CLAUDE.md'))) out.push(`skipped: CLAUDE.md (${t('initClaudeMdExists')})`);
+  else write('CLAUDE.md', fill(fs.readFileSync(claudeTemplate, 'utf8'), vars), 'created');
 
   // 4. .gitignore entry.
   const giFile = path.join(root, '.gitignore');
   const gi = fs.existsSync(giFile) ? fs.readFileSync(giFile, 'utf8') : '';
-  if (gi.split(/\r?\n/).some((l) => l.trim() === GITIGNORE_LINE || l.trim() === '/' + GITIGNORE_LINE)) out.push('skipped: .gitignore (ya ignora .claude/.aldc-verify/)');
+  if (gi.split(/\r?\n/).some((l) => l.trim() === GITIGNORE_LINE || l.trim() === '/' + GITIGNORE_LINE)) out.push(`skipped: .gitignore (${t('initGitignoreHas')})`);
   else {
     const add = `${gi && !gi.endsWith('\n') ? '\n' : ''}\n# aldc-verify (Claude Code plugin): local compile state, symbol cache and build output\n${GITIGNORE_LINE}\n`;
     if (!a.dryRun) fs.appendFileSync(giFile, add);
@@ -134,14 +138,14 @@ function main() {
   // 5. CI workflow, only when symbols are versioned (CI can't download them yet).
   const ciRel = '.github/workflows/al-compile.yml';
   if (!a.ci) out.push(`skipped: ${ciRel} (--no-ci)`);
-  else if (fs.existsSync(path.join(root, ciRel))) out.push(`skipped: ${ciRel} (ya existe)`);
-  else if (!hasSymbols) out.push(`skipped: ${ciRel} (el repo no versiona símbolos en .alpackages; la CI no podría compilar)`);
+  else if (fs.existsSync(path.join(root, ciRel))) out.push(`skipped: ${ciRel} (${t('initExists')})`);
+  else if (!hasSymbols) out.push(`skipped: ${ciRel} (${t('initNoSymbolsCi')})`);
   else write(ciRel, fill(fs.readFileSync(path.join(PLUGIN_ROOT, 'templates', 'github', 'al-compile.yml'), 'utf8'), vars), 'created');
 
-  console.log(`aldc-verify init${a.dryRun ? ' (dry-run)' : ''}: ${root}`);
-  console.log(`${repoName} · BC ${effective.bcMajor} · proyectos: ${projects.map((p) => p.rel).join(', ')} · alExtension ${effective.alExtension || '-'} · alTool ${effective.alTool} (${effective.source}) · planes ${plansRoot} · rama ${defaultBranch}`);
+  console.log(t('initHeader', a.dryRun, root));
+  console.log(t('initSummary', repoName, effective.bcMajor, projects.map((p) => p.rel).join(', '), effective.alExtension || '-', effective.alTool, effective.source, plansRoot, defaultBranch));
   for (const l of out) console.log(`- ${l}`);
   return 0;
 }
 
-try { process.exitCode = main(); } catch (err) { console.log(`aldc-verify init: error interno (${err && err.message}).`); process.exitCode = 3; }
+try { process.exitCode = main(); } catch (err) { console.log(t('initInternal', err && err.message)); process.exitCode = 3; }
