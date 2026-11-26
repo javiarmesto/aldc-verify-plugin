@@ -82,3 +82,46 @@ test('gate: a broken stdin never traps the session', () => {
   const r = runScript('al-verify-gate.js', { input: '{not json', env: noCompiler(repo) });
   assert.equal(r.code, 0);
 });
+
+// 0.4.1: a subagent launched with isolation: worktree stops in a linked worktree of the project.
+const { spawnSync } = require('child_process');
+const { gitAvailable } = require('./helpers');
+function repoWithWorktree() {
+  const repo = makeAlRepo({ config: { maxAttempts: 3 } });
+  const git = (...a) => spawnSync('git', a, { cwd: repo, encoding: 'utf8' });
+  git('init', '-q'); git('add', 'App/app.json'); git('add', 'App/src/Hello.Codeunit.al');
+  git('-c', 'user.name=t', '-c', 'user.email=t@localhost', 'commit', '-qm', 'base');
+  const wt = path.join(repo, '.claude', 'worktrees', 'agent-1');
+  git('worktree', 'add', '-q', wt, '-b', 'worktree-agent-1');
+  return { repo, wt: fs.realpathSync.native(wt) };
+}
+const subStop = (cwd) => ({ hook_event_name: 'SubagentStop', cwd, agent_type: 'aldc:al-implementer', agent_id: 'a1', stop_hook_active: false });
+
+test('gate: SubagentStop in a worktree compiles that worktree, not the project', { skip: !gitAvailable() }, () => {
+  const { repo, wt } = repoWithWorktree();
+  fs.appendFileSync(path.join(wt, 'App', 'src', 'Hello.Codeunit.al'), '// changed in the worktree\n');
+  const r = runScript('al-verify-gate.js', { input: subStop(path.join(wt, 'App')), env: noCompiler(repo) });
+  assert.equal(r.code, 0);
+  assert.match(JSON.parse(r.stdout).systemMessage, /not-run/);
+  assert.equal(env.readState(wt).history.at(-1).status, 'not-run', 'the worktree keeps its own state');
+  const audit = env.readState(repo).history.at(-1);
+  assert.equal(audit.worktree, '.claude/worktrees/agent-1');
+  assert.equal(audit.agent, 'aldc:al-implementer');
+});
+
+test('gate: a worktree the subagent already compiled green leaves a cached line in the project', { skip: !gitAvailable() }, () => {
+  const { repo, wt } = repoWithWorktree();
+  env.writeState(wt, { lastGreen: fp(wt) });
+  const r = runScript('al-verify-gate.js', { input: subStop(wt), env: noCompiler(repo) });
+  assert.equal(r.code, 0);
+  assert.equal(r.stdout, '');
+  const audit = env.readState(repo).history.at(-1);
+  assert.deepEqual([audit.status, audit.cached, audit.worktree], ['green', true, '.claude/worktrees/agent-1']);
+});
+
+test('gate: a worktree without its own config uses the main checkout config', { skip: !gitAvailable() }, () => {
+  const { wt } = repoWithWorktree();
+  assert.equal(env.loadConfig(wt).maxAttempts, 3);
+  fs.rmSync(path.join(wt, '.claude', 'aldc-verify.json'), { force: true });
+  assert.ok(env.mainCheckout(wt));
+});

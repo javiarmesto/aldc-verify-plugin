@@ -16,9 +16,24 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8').replace(/^﻿/, ''));
 }
 
+// The main checkout of the repository when root is a linked git worktree, else null.
+function mainCheckout(root) {
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root, encoding: 'utf8', timeout: 5000 });
+  if (common.status !== 0) return null;
+  const mainRoot = path.dirname(common.stdout.trim());
+  const real = (p) => { try { return fs.realpathSync.native(path.resolve(p)); } catch { return path.resolve(p); } };
+  const same = process.platform === 'win32' ? real(mainRoot).toLowerCase() === real(root).toLowerCase() : real(mainRoot) === real(root);
+  return same ? null : mainRoot;
+}
+
+// A linked worktree without its own config uses the main checkout's (it is usually untracked).
 function loadConfig(root) {
-  const file = path.join(root, CONFIG_FILE);
+  let file = path.join(root, CONFIG_FILE);
   const defaults = { bcMajor: null, compiler: {}, analyzers: [], ruleset: null, maxAttempts: 3 };
+  if (!fs.existsSync(file)) {
+    const main = mainCheckout(root);
+    if (main) file = path.join(main, CONFIG_FILE);
+  }
   if (!fs.existsSync(file)) return defaults;
   const cfg = readJson(file);
   return { ...defaults, ...cfg, compiler: { ...(cfg.compiler || {}) } };
@@ -178,13 +193,10 @@ function symbolSource(root, project) {
     const dir = path.resolve(project.dir, String(c));
     if (hasApps(dir)) return { dir, from: 'al.packageCachePath' };
   }
-  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root, encoding: 'utf8' });
-  if (common.status === 0) {
-    const mainRoot = path.dirname(common.stdout.trim());
-    if (path.resolve(mainRoot) !== path.resolve(root)) {
-      const dir = path.join(mainRoot, path.relative(root, project.dir), '.alpackages');
-      if (hasApps(dir)) return { dir, from: t('mainCheckout') };
-    }
+  const mainRoot = mainCheckout(root);
+  if (mainRoot) {
+    const dir = path.join(mainRoot, path.relative(root, project.dir), '.alpackages');
+    if (hasApps(dir)) return { dir, from: t('mainCheckout') };
   }
   return { dir: own, from: null };
 }
@@ -443,4 +455,4 @@ function releaseLock(file) {
   } catch { /* already gone */ }
 }
 
-module.exports = { STATE_DIR, DEFAULT_AL_TOOL, loadConfig, findProjects, findCompiler, targetBcMajor, fingerprint, readState, writeState, ensureStateDir, appendHistory, verifyAll };
+module.exports = { STATE_DIR, DEFAULT_AL_TOOL, mainCheckout, loadConfig, findProjects, findCompiler, targetBcMajor, fingerprint, readState, writeState, ensureStateDir, appendHistory, verifyAll };

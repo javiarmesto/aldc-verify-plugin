@@ -62,6 +62,8 @@ The plugin registers six hooks. They only act in repos with at least one `app.js
 6. After `maxAttempts` (3) blocks in a row, or when Claude changes nothing after a block, it lets Claude stop and shows the pending errors. If the build turns green after a block, it tells Claude once, so the final answer cites it.
 7. No compiler, missing symbols, or `alc` failing without diagnostics: `not-run` or `incomplete verification`, and it **never blocks**.
 
+**Subagents in git worktrees (0.4.1):** a subagent launched with `isolation: worktree` stops in its own linked worktree of the project. In that case, SubagentStop compiles that worktree, not the main checkout. The worktree takes its symbols from the main checkout, and so does its `.claude/aldc-verify.json` when it has none of its own. The gate keeps its state in the worktree, which is deleted with the worktree. So each result, including "already green", also leaves a history line with `worktree` and `agent` in the main checkout's `.claude/.aldc-verify/state.json`.
+
 **Concurrency:** compiles of the same repo run one at a time, with a lock in `.claude/.aldc-verify/compile.lock` (waits up to 5 minutes, cleans orphaned locks). Each run uses its own cache under `run/`, deleted at the end.
 
 ### Commands
@@ -235,6 +237,8 @@ El plugin registra seis hooks. Solo actúan en repos con al menos un `app.json`.
 5. Con errores, `exit 2` y hasta 40 diagnósticos por stderr, así que Claude sigue corrigiendo. El mensaje le pide confirmar con `/aldc-verify:al-verify --l1`, porque el verde final del gate solo lo ve el usuario.
 6. Tras `maxAttempts` (3) bloqueos seguidos, o si Claude no cambia nada tras un bloqueo, deja parar y muestra los errores pendientes. Si se pone en verde después de bloquear, se lo dice a Claude una vez, para que su respuesta final lo cite.
 7. Sin compilador, sin símbolos o si `alc` falla sin diagnósticos: `not-run` o `verificación incompleta`, y **nunca bloquea**.
+
+**Subagentes en worktrees de git (0.4.1):** un subagente lanzado con `isolation: worktree` termina en su propio worktree enlazado del proyecto. En ese caso, SubagentStop compila ese worktree y no el checkout principal. El worktree toma los símbolos del checkout principal, y también su `.claude/aldc-verify.json` si no tiene uno propio. El gate guarda su estado en el worktree, que se borra con el worktree. Por eso cada resultado, también "ya en verde", deja además una línea con `worktree` y `agent` en el historial de `.claude/.aldc-verify/state.json` del checkout principal.
 
 **Concurrencia:** las compilaciones de un mismo repo van de una en una, con un lock en `.claude/.aldc-verify/compile.lock` (espera hasta 5 minutos y limpia los locks huérfanos). Cada ejecución usa su propia caché en `run/`, que se borra al terminar.
 
