@@ -2,6 +2,15 @@
 
 All notable changes to aldc-verify. Versions follow the `version` in `.claude-plugin/plugin.json`.
 
+## 0.4.1 - 2026-11-26
+
+- **SubagentStop compiles the subagent's own git worktree.** A subagent launched with `isolation: worktree` stops in a linked worktree of the project. The gate used to compile `CLAUDE_PROJECT_DIR`, the main checkout, where nothing had changed, so the worktree's code was never compiled. When the subagent's `cwd` is in another worktree of the same repository, the gate now compiles that worktree.
+- **Config fallback.** A worktree without its own `.claude/aldc-verify.json` uses the main checkout's.
+- **Audit line.** The worktree's state is deleted with the worktree. Each gate result for a worktree, including the "already green" fast path, also writes a `worktree` line to the main checkout's history.
+- **Paths.** Path comparisons use real paths, so a Windows 8.3 short path (temp folders) and the long path git prints count as the same folder.
+- **Tests:** three new tests, with real git and no compiler.
+- **Checked by hand on Windows with `alc`:** an error planted in the worktree blocks with `AL0118` and goes green once it is fixed. The main checkout is not compiled.
+
 ## 0.4.0 - 2026-10-21
 
 Standalone release: any Business Central developer can use the plugin, with or without ALDC.
